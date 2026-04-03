@@ -1,0 +1,159 @@
+#' Gaussian Process Model for Spatial and Spatiotemporal Data
+#'
+#' @description
+#' `gaussian_process_spatial()` defines a Gaussian Process model for spatial
+#' and spatiotemporal data. This model supports multiple backends ("engines"),
+#' including **gstat**, **fields**, **GPvecchia**, and **spNNGP**.
+#'
+#' @param mode A single character string for the prediction outcome mode.
+#'   The only possible value for this model is `"regression"`.
+#' @param covariance_function The type of covariance function (variogram model)
+#'   to use. One of `"exponential"`, `"spherical"`, `"gaussian"`,
+#'   `"matern"`, or `"stein_matern"`. Defaults to `NULL` (uses engine
+#'   default, typically `"exponential"`).
+#' @param range The range (or scale) parameter of the covariance function.
+#'   Controls the distance at which spatial correlation effectively vanishes.
+#'   Defaults to `NULL` (estimated from data).
+#' @param nugget The nugget variance representing micro-scale variation and
+#'   measurement error. Defaults to `NULL` (estimated from data).
+#' @param sill The partial sill, i.e., the spatially structured variance
+#'   component. Defaults to `NULL` (estimated from data).
+#'
+#' @details
+#' ## What does this model do?
+#'
+#' Gaussian Process (GP) models — commonly known as Kriging in geostatistics —
+#' predict values at unobserved locations by leveraging spatial autocorrelation.
+#' The model assumes observations are a realisation of a GP with a specified
+#' covariance structure. The covariance structure is characterised by a
+#' variogram model parameterised by `range`, `nugget`, and `sill`.
+#'
+#' ## Engines
+#'
+#' The following engines are available:
+#'
+#' * `"gstat"` — Uses the **gstat** package for variogram-based kriging
+#'   (ordinary, universal, and simple kriging). Supports spatiotemporal
+#'   kriging with a `time_col` engine argument.
+#' * `"fields"` — Uses the **fields** package (`Krig`/`mKrig`) for spatial
+#'   kriging. Supports large datasets via `mKrig`.
+#' * `"GPvecchia"` — Uses the **GPvecchia** package for Vecchia-approximated
+#'   GP inference, suitable for large spatial datasets.
+#' * `"spNNGP"` — Uses the **spNNGP** package for Nearest Neighbor Gaussian
+#'   Process models, also scalable for large datasets.
+#'
+#' ## Parameter Mapping
+#'
+#' Parameters are automatically mapped between the unified gopher interface
+#' and engine-specific argument names:
+#'
+#' | gopher                | gstat (vgm)   | fields (Krig) | GPvecchia  | spNNGP    |
+#' |-----------------------|---------------|---------------|------------|-----------|
+#' | `covariance_function` | `model`       | `Covariance`  | `covFun`   | `cov.model` |
+#' | `range`               | `range`       | `aRange`      | `range`    | `phi`     |
+#' | `nugget`              | `nugget`      | `sigma2`      | `nugget`   | `tau.sq`  |
+#' | `sill`                | `psill`       | `sigma2`      | `sigma2`   | `sigma.sq` |
+#'
+#' ## Spatial Inputs
+#'
+#' Input data can be provided as:
+#' * An `sf` object — geometry column is used for coordinates automatically.
+#' * A `data.frame` with columns `x` and `y` (or `lon` and `lat`).
+#'
+#' ## Covariates (Universal / Residual Kriging)
+#'
+#' When covariates are included in the formula (e.g., `y ~ x1 + x2`), the
+#' model performs **Universal Kriging** — fitting a linear trend model with
+#' spatial correlation of residuals. Use `y ~ 1` for **Ordinary Kriging**
+#' (no covariates, constant mean).
+#'
+#' ## Spatiotemporal Kriging
+#'
+#' Spatiotemporal kriging is supported through the `"gstat"` engine by passing
+#' `time_col` as an engine argument via `set_engine()`. The column specified
+#' must contain date/time values.
+#'
+#' @return A `gaussian_process_spatial` model specification of class
+#'   `c("gaussian_process_spatial", "model_spec")`.
+#'
+#' @seealso [parsnip::set_engine()], [parsnip::fit.model_spec()],
+#'   [parsnip::predict.model_fit()]
+#'
+#' @export
+#' @examples
+#' # Ordinary Kriging with gstat engine
+#' gp_spec <- gaussian_process_spatial(
+#'   covariance_function = "exponential"
+#' ) |>
+#'   parsnip::set_engine("gstat")
+#'
+#' # Universal Kriging (with covariates) — formula y ~ x1 + x2
+#' gp_uk <- gaussian_process_spatial(
+#'   covariance_function = "spherical",
+#'   nugget = 0.1
+#' ) |>
+#'   parsnip::set_engine("gstat")
+#'
+#' # Specify all variogram parameters explicitly
+#' gp_manual <- gaussian_process_spatial(
+#'   covariance_function = "exponential",
+#'   range  = 100,
+#'   nugget = 0.05,
+#'   sill   = 1.0
+#' ) |>
+#'   parsnip::set_engine("fields")
+gaussian_process_spatial <- function(
+    mode                = "regression",
+    covariance_function = NULL,
+    range               = NULL,
+    nugget              = NULL,
+    sill                = NULL) {
+
+  args <- list(
+    covariance_function = rlang::enquo(covariance_function),
+    range               = rlang::enquo(range),
+    nugget              = rlang::enquo(nugget),
+    sill                = rlang::enquo(sill)
+  )
+
+  parsnip::new_model_spec(
+    "gaussian_process_spatial",
+    args               = args,
+    eng_args           = NULL,
+    mode               = mode,
+    user_specified_mode = !missing(mode),
+    method             = NULL,
+    engine             = NULL
+  )
+}
+
+# ---- S3 methods -------------------------------------------------------
+
+#' @export
+print.gaussian_process_spatial <- function(x, ...) {
+  cat("Gaussian Process Model Specification (", x$mode, ")\n\n", sep = "")
+  parsnip::model_printer(x, ...)
+  invisible(x)
+}
+
+#' @export
+#' @rdname gaussian_process_spatial
+update.gaussian_process_spatial <- function(
+    object,
+    parameters          = NULL,
+    covariance_function = NULL,
+    range               = NULL,
+    nugget              = NULL,
+    sill                = NULL,
+    fresh               = FALSE,
+    ...) {
+
+  args <- list(
+    covariance_function = rlang::enquo(covariance_function),
+    range               = rlang::enquo(range),
+    nugget              = rlang::enquo(nugget),
+    sill                = rlang::enquo(sill)
+  )
+
+  parsnip::update_spec(object, parameters, args, fresh, ...)
+}

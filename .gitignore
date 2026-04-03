@@ -1,0 +1,18 @@
+# R package build artifacts
+*.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+src/*.so
+src/*.o
+/doc/
+/Meta/
+
+# Test artefacts
+tests/testthat/Rplots.pdf
+
+# macOS
+.DS_Store
+
+# R check output
+/*.Rcheck/

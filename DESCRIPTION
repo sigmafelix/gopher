@@ -1,0 +1,42 @@
+Package: gopher
+Title: tidymodels-Compatible Gaussian Process Model Zoo
+Version: 0.1.0
+Authors@R: c(
+    person("Felix", "Sigmar", role = c("aut", "cre"),
+           email = "felix.sigmar@example.com"))
+Description: A gateway to various Gaussian Process (GP) packages available on
+    CRAN, including gstat, fields, GPvecchia, and spNNGP. Provides a unified
+    tidymodels-native interface through parsnip for model parameter adjustment
+    and hyperparameter tuning. Supports spatial-only and spatiotemporal
+    Kriging, sf inputs, prediction capabilities, and covariates for residual
+    Gaussian Process (Universal Kriging) models. Parameters are automatically
+    matched between the unified Kriging-centered argument names in gstat and
+    the formulaic arguments used in other packages for the same construct.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.1
+Depends:
+    R (>= 4.1.0)
+Imports:
+    cli,
+    dplyr,
+    parsnip (>= 1.0.0),
+    rlang (>= 1.0.0),
+    sf,
+    stats,
+    tibble
+Suggests:
+    dials (>= 1.0.0),
+    fields,
+    GPvecchia,
+    gstat,
+    sp,
+    spacetime,
+    spNNGP,
+    testthat (>= 3.0.0),
+    workflows,
+    withr
+Config/testthat/edition: 3
+URL: https://github.com/sigmafelix/gopher
+BugReports: https://github.com/sigmafelix/gopher/issues
