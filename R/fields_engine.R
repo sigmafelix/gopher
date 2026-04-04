@@ -21,7 +21,9 @@
 #' @param data     An `sf` object or a `data.frame` with coordinate columns.
 #' @param covariance_function Canonical covariance name. Defaults to
 #'   `"exponential"`. Note: `"spherical"` and `"gaussian"` are approximated
-#'   via `fields::Exp.cov`.
+#'   via `fields::Exp.cov`. You can also pass a covariance function directly
+#'   (e.g. `fields::Matern`), including through a one-sided formula used by
+#'   `parsnip` (e.g. `~fields::Matern`).
 #' @param range    Range (aRange) parameter for the covariance. `NULL` =
 #'   estimated by `fields::Krig()`.
 #' @param nugget   Nugget variance. Used to compute `lambda = nugget / sigma2`.
@@ -33,6 +35,30 @@
 #'   `fields::mKrig()`.
 #'
 #' @return A list of class `"gopher_fields_fit"`.
+#' @examples
+#' if (requireNamespace("spacetime", quietly = TRUE) &&
+#'     requireNamespace("fields", quietly = TRUE)) {
+#'   data("air", package = "spacetime")
+#'
+#'   day_id <- which.max(colSums(!is.na(air)))
+#'   air_day <- data.frame(
+#'     station = rownames(air),
+#'     pm10 = air[, day_id],
+#'     day = dates[day_id],
+#'     sp::coordinates(stations)
+#'   )
+#'   air_day <- air_day[stats::complete.cases(air_day$pm10), ]
+#'   air_sf <- sf::st_as_sf(
+#'     air_day,
+#'     coords = c("coords.x1", "coords.x2"),
+#'     crs = 4326,
+#'     remove = FALSE
+#'   )
+#'
+#'   fit <- fields_gp_fit(pm10 ~ coords.x1 + coords.x2, data = air_sf)
+#'   fit
+#' }
+#'
 #' @export
 fields_gp_fit <- function(
     formula,
@@ -63,19 +89,71 @@ fields_gp_fit <- function(
     NULL
   }
 
-  # ---- Map covariance name -------------------------------------------
-  cov_fn_name <- translate_covariance(
-    covariance_function, "fields", default = "Exponential"
-  )
+  # ---- Resolve covariance function ------------------------------------
+  cov_input <- covariance_function
+  if (inherits(cov_input, "formula")) {
+    cov_input <- rlang::f_rhs(cov_input)
+  }
 
-  # Resolve cov.function: fields uses the actual function or its name
-  cov_fn <- switch(
-    cov_fn_name,
-    Exponential  = fields::Exponential,
-    Matern       = fields::Matern,
-    # fallback to fields::Exp.cov for others
-    fields::Exp.cov
-  )
+  cov_fn <- NULL
+  cov_fn_name <- NULL
+  cov_args_auto <- NULL
+
+  if (is.null(cov_input) || length(cov_input) == 0L) {
+    cov_fn_name <- "Exponential"
+  } else if (is.function(cov_input)) {
+    if (identical(cov_input, fields::Matern)) {
+      cov_fn_name <- "Matern"
+    } else if (identical(cov_input, fields::Exponential)) {
+      cov_fn_name <- "Exponential"
+    } else {
+      cov_fn <- cov_input
+      cov_fn_name <- "user_function"
+    }
+  } else if (is.language(cov_input) || is.symbol(cov_input)) {
+    maybe_fn <- tryCatch(
+      rlang::eval_tidy(cov_input),
+      error = function(e) NULL
+    )
+    if (is.function(maybe_fn)) {
+      if (identical(maybe_fn, fields::Matern)) {
+        cov_fn_name <- "Matern"
+      } else if (identical(maybe_fn, fields::Exponential)) {
+        cov_fn_name <- "Exponential"
+      } else {
+        cov_fn <- maybe_fn
+        cov_fn_name <- "user_function"
+      }
+    } else {
+      cov_label <- paste(deparse(cov_input), collapse = "")
+      cov_fn_name <- translate_covariance(
+        cov_label, "fields", default = "Exponential"
+      )
+    }
+  } else {
+    cov_label <- as.character(cov_input)
+    cov_fn_name <- translate_covariance(
+      cov_label, "fields", default = "Exponential"
+    )
+  }
+
+  if (is.null(cov_fn)) {
+    # fields::Krig expects a covariance with a C argument.
+    # Route Matern/Exponential through stationary.cov.
+    cov_fn <- switch(
+      cov_fn_name,
+      Exponential  = "stationary.cov",
+      Matern       = "stationary.cov",
+      # fallback to Exp.cov for approximations
+      "Exp.cov"
+    )
+    cov_args_auto <- switch(
+      cov_fn_name,
+      Exponential = list(Covariance = "Exponential"),
+      Matern      = list(Covariance = "Matern"),
+      NULL
+    )
+  }
 
   # ---- Build Krig/mKrig call arguments ----------------------------------
   krig_args <- list(
@@ -98,8 +176,22 @@ fields_gp_fit <- function(
   # ---- Fit --------------------------------------------------------------
   fit_fn <- if (use_mKrig) fields::mKrig else fields::Krig
 
+  extra_args <- list(...)
+  if (!use_mKrig && !is.null(Z) && is.null(extra_args$m)) {
+    # Avoid duplicated low-order trend terms between Krig's null-space basis
+    # (default m = 2) and user-provided covariates in Z.
+    extra_args$m <- 0
+  }
+  if (!is.null(cov_args_auto)) {
+    if (!is.null(extra_args$cov.args)) {
+      extra_args$cov.args <- utils::modifyList(cov_args_auto, extra_args$cov.args)
+    } else {
+      extra_args$cov.args <- cov_args_auto
+    }
+  }
+
   krig_obj <- tryCatch(
-    do.call(fit_fn, c(krig_args, list(cov.function = cov_fn), list(...))),
+    do.call(fit_fn, c(krig_args, list(cov.function = cov_fn), extra_args)),
     error = function(e) {
       cli::cli_abort(
         c(
@@ -134,6 +226,34 @@ fields_gp_fit <- function(
 #' @param ... Forwarded to `predict.Krig()` / `predictSE.Krig()`.
 #'
 #' @return A [tibble::tibble()] with prediction columns.
+#' @examples
+#' if (requireNamespace("spacetime", quietly = TRUE) &&
+#'     requireNamespace("fields", quietly = TRUE)) {
+#'   data("air", package = "spacetime")
+#'
+#'   day_id <- which.max(colSums(!is.na(air)))
+#'   air_day <- data.frame(
+#'     station = rownames(air),
+#'     pm10 = air[, day_id],
+#'     day = dates[day_id],
+#'     sp::coordinates(stations)
+#'   )
+#'   air_day <- air_day[stats::complete.cases(air_day$pm10), ]
+#'   air_sf <- sf::st_as_sf(
+#'     air_day,
+#'     coords = c("coords.x1", "coords.x2"),
+#'     crs = 4326,
+#'     remove = FALSE
+#'   )
+#'
+#'   n_train <- floor(0.8 * nrow(air_sf))
+#'   train_sf <- air_sf[seq_len(n_train), ]
+#'   test_sf <- air_sf[seq.int(n_train + 1L, nrow(air_sf)), ]
+#'
+#'   fit <- fields_gp_fit(pm10 ~ coords.x1 + coords.x2, data = train_sf)
+#'   fields_gp_predict(fit, new_data = test_sf, type = "pred_int")
+#' }
+#'
 #' @export
 fields_gp_predict <- function(
     object,

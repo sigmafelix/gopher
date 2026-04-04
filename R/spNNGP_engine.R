@@ -9,8 +9,10 @@
 #                       method = "response")
 #   predict(m, X.0 = ..., coords.0 = ...)
 
+
 #' Fit a Gaussian Process model using the spNNGP engine
 #'
+#' @description
 #' This function is called internally by parsnip. End users should call
 #' [parsnip::fit.model_spec()] on a `gaussian_process_spatial` specification
 #' with `set_engine("spNNGP")`.
@@ -34,6 +36,36 @@
 #' @param ... Additional arguments forwarded to `spNNGP::spNNGP()`.
 #'
 #' @return A list of class `"gopher_spNNGP_fit"`.
+#' @examples
+#' if (requireNamespace("spacetime", quietly = TRUE) &&
+#'     requireNamespace("spNNGP", quietly = TRUE)) {
+#'   data("air", package = "spacetime")
+#'
+#'   day_id <- which.max(colSums(!is.na(air)))
+#'   air_day <- data.frame(
+#'     station = rownames(air),
+#'     pm10 = air[, day_id],
+#'     day = dates[day_id],
+#'     sp::coordinates(stations)
+#'   )
+#'   air_day <- air_day[stats::complete.cases(air_day$pm10), ]
+#'   air_sf <- sf::st_as_sf(
+#'     air_day,
+#'     coords = c("coords.x1", "coords.x2"),
+#'     crs = 4326,
+#'     remove = FALSE
+#'   )
+#'
+#'   fit <- spNNGP_gp_fit(
+#'     pm10 ~ coords.x1 + coords.x2,
+#'     data = air_sf,
+#'     n_neighbors = 8,
+#'     n_samples = 80,
+#'     n_burnin = 40
+#'   )
+#'   fit
+#' }
+#'
 #' @export
 spNNGP_gp_fit <- function(
     formula,
@@ -134,6 +166,40 @@ spNNGP_gp_fit <- function(
 #' @param ... Forwarded to `predict.spNNGP()`.
 #'
 #' @return A [tibble::tibble()] with prediction columns.
+#' @examples
+#' if (requireNamespace("spacetime", quietly = TRUE) &&
+#'     requireNamespace("spNNGP", quietly = TRUE)) {
+#'   data("air", package = "spacetime")
+#'
+#'   day_id <- which.max(colSums(!is.na(air)))
+#'   air_day <- data.frame(
+#'     station = rownames(air),
+#'     pm10 = air[, day_id],
+#'     day = dates[day_id],
+#'     sp::coordinates(stations)
+#'   )
+#'   air_day <- air_day[stats::complete.cases(air_day$pm10), ]
+#'   air_sf <- sf::st_as_sf(
+#'     air_day,
+#'     coords = c("coords.x1", "coords.x2"),
+#'     crs = 4326,
+#'     remove = FALSE
+#'   )
+#'
+#'   n_train <- floor(0.8 * nrow(air_sf))
+#'   train_sf <- air_sf[seq_len(n_train), ]
+#'   test_sf <- air_sf[seq.int(n_train + 1L, nrow(air_sf)), ]
+#'
+#'   fit <- spNNGP_gp_fit(
+#'     pm10 ~ coords.x1 + coords.x2,
+#'     data = train_sf,
+#'     n_neighbors = 8,
+#'     n_samples = 80,
+#'     n_burnin = 40
+#'   )
+#'   spNNGP_gp_predict(fit, new_data = test_sf, type = "pred_int")
+#' }
+#'
 #' @export
 spNNGP_gp_predict <- function(
     object,

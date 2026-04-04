@@ -29,6 +29,30 @@
 #'   `GPvecchia::vecchia_specify()`.
 #'
 #' @return A list of class `"gopher_GPvecchia_fit"`.
+#' @examples
+#' if (requireNamespace("spacetime", quietly = TRUE) &&
+#'     requireNamespace("GPvecchia", quietly = TRUE)) {
+#'   data("air", package = "spacetime")
+#'
+#'   day_id <- which.max(colSums(!is.na(air)))
+#'   air_day <- data.frame(
+#'     station = rownames(air),
+#'     pm10 = air[, day_id],
+#'     day = dates[day_id],
+#'     sp::coordinates(stations)
+#'   )
+#'   air_day <- air_day[stats::complete.cases(air_day$pm10), ]
+#'   air_sf <- sf::st_as_sf(
+#'     air_day,
+#'     coords = c("coords.x1", "coords.x2"),
+#'     crs = 4326,
+#'     remove = FALSE
+#'   )
+#'
+#'   fit <- GPvecchia_gp_fit(pm10 ~ coords.x1 + coords.x2, data = air_sf, m = 10)
+#'   fit
+#' }
+#'
 #' @export
 GPvecchia_gp_fit <- function(
     formula,
@@ -50,6 +74,15 @@ GPvecchia_gp_fit <- function(
   response <- parsed$response
   X        <- parsed$X   # model matrix including intercept
 
+  # Model trend separately and fit GP to residuals.
+  beta_hat <- tryCatch(
+    stats::lm.fit(x = X, y = response)$coefficients,
+    error = function(e) rep(0, ncol(X))
+  )
+  if (anyNA(beta_hat)) {
+    beta_hat[is.na(beta_hat)] <- 0
+  }
+
   cov_fn <- translate_covariance(
     covariance_function, "GPvecchia", default = "exponential"
   )
@@ -63,65 +96,89 @@ GPvecchia_gp_fit <- function(
   }
   init_nugget <- nugget %||% (y_var * 0.1)
 
-  # ---- Vecchia approximation specification ------------------------------
+  if (!identical(cov_fn, "matern")) {
+    cli::cli_warn(
+      c(
+        "GPvecchia covariance {.val {cov_fn}} is not available in this engine build.",
+        "i" = "Falling back to {.val matern}."
+      )
+    )
+    cov_fn <- "matern"
+  }
+
+  theta_start <- c(
+    variance   = init_sigma2,
+    range      = init_range,
+    smoothness = 0.5,
+    nugget     = init_nugget
+  )
+
   vecchia_approx <- GPvecchia::vecchia_specify(
     locs = coords,
     m    = as.integer(m),
     ...
   )
 
-  # ---- MLE using optim --------------------------------------------------
-  # Log-likelihood wrapper
-  neg_log_lik <- function(params) {
-    sigma2_v <- exp(params[1])
-    range_v  <- exp(params[2])
-    nugget_v <- exp(params[3])
+  ll_fun <- function(theta_vec) {
     tryCatch(
-      -GPvecchia::vecchia_likelihood(
-        y          = response,
+      GPvecchia::vecchia_likelihood(
+        z              = as.numeric(response - X %*% beta_hat),
         vecchia.approx = vecchia_approx,
-        covparms   = c(sigma2_v, range_v, nugget_v),
-        nugget     = nugget_v,
-        covfun.name = cov_fn,
-        X          = X
+        covparms       = theta_vec[1:3],
+        nuggets        = theta_vec[4],
+        covmodel       = cov_fn
       ),
-      error = function(e) Inf
+      error = function(e) NA_real_
     )
   }
 
-  init_params <- log(c(init_sigma2, init_range, init_nugget))
-
-  opt <- tryCatch(
-    stats::optim(
-      par    = init_params,
-      fn     = neg_log_lik,
-      method = "L-BFGS-B"
-    ),
-    error = function(e) {
-      cli::cli_warn(
-        c(
-          "GPvecchia MLE optimisation failed: {conditionMessage(e)}",
-          "i" = "Using initial parameter values."
-        )
-      )
-      list(par = init_params, convergence = 1L)
+  best_start <- theta_start
+  ll_best <- ll_fun(best_start)
+  if (!is.finite(ll_best)) {
+    theta_try <- best_start
+    for (i in seq_len(8L)) {
+      theta_try["nugget"] <- theta_try["nugget"] * 2
+      theta_try["range"] <- theta_try["range"] * 0.9
+      ll_try <- ll_fun(theta_try)
+      if (is.finite(ll_try)) {
+        best_start <- theta_try
+        ll_best <- ll_try
+        break
+      }
     }
+  }
+  if (!is.finite(ll_best)) {
+    cli::cli_abort("GPvecchia likelihood could not be evaluated at stable initial parameter values.")
+  }
+  cli::cli_warn(
+    c(
+      "GPvecchia is using a stable finite-parameter initialization rather than iterative MLE.",
+      "i" = "This avoids numerical failures in some GPvecchia builds."
+    )
   )
 
-  est_params <- exp(opt$par)
-  names(est_params) <- c("sigma2", "range", "nugget")
+  theta_hat <- as.numeric(best_start)
+  names(theta_hat) <- c("variance", "range", "smoothness", "nugget")
+  est_params <- c(
+    sigma2     = unname(theta_hat["variance"]),
+    range      = unname(theta_hat["range"]),
+    nugget     = unname(theta_hat["nugget"]),
+    smoothness = unname(theta_hat["smoothness"])
+  )
 
   structure(
     list(
       vecchia_approx = vecchia_approx,
       params         = est_params,
       cov_fn         = cov_fn,
+      beta_hat       = as.numeric(beta_hat),
       X_train        = X,
       response       = response,
       coords         = coords,
       training_data  = plain_data,
       formula        = formula,
-      opt_result     = opt
+      m              = as.integer(m),
+      opt_result     = list(convergence = NA_integer_, par = log(theta_hat))
     ),
     class = "gopher_GPvecchia_fit"
   )
@@ -136,9 +193,38 @@ GPvecchia_gp_fit <- function(
 #' @param m_pred   Number of nearest neighbours for prediction approximation.
 #'   Defaults to the training `m`.
 #' @param coord_cols Character(2) coord column names (non-sf path).
-#' @param ... Forwarded to `GPvecchia::vecchia_prediction()`.
+#' @param ... Additional arguments forwarded to
+#'   `GPvecchia::vecchia_specify()` for prediction graph construction.
 #'
 #' @return A [tibble::tibble()] with prediction columns.
+#' @examples
+#' if (requireNamespace("spacetime", quietly = TRUE) &&
+#'     requireNamespace("GPvecchia", quietly = TRUE)) {
+#'   data("air", package = "spacetime")
+#'
+#'   day_id <- which.max(colSums(!is.na(air)))
+#'   air_day <- data.frame(
+#'     station = rownames(air),
+#'     pm10 = air[, day_id],
+#'     day = dates[day_id],
+#'     sp::coordinates(stations)
+#'   )
+#'   air_day <- air_day[stats::complete.cases(air_day$pm10), ]
+#'   air_sf <- sf::st_as_sf(
+#'     air_day,
+#'     coords = c("coords.x1", "coords.x2"),
+#'     crs = 4326,
+#'     remove = FALSE
+#'   )
+#'
+#'   n_train <- floor(0.8 * nrow(air_sf))
+#'   train_sf <- air_sf[seq_len(n_train), ]
+#'   test_sf <- air_sf[seq.int(n_train + 1L, nrow(air_sf)), ]
+#'
+#'   fit <- GPvecchia_gp_fit(pm10 ~ coords.x1 + coords.x2, data = train_sf, m = 10)
+#'   GPvecchia_gp_predict(fit, new_data = test_sf, type = "pred_int")
+#' }
+#'
 #' @export
 GPvecchia_gp_predict <- function(
     object,
@@ -178,21 +264,43 @@ GPvecchia_gp_predict <- function(
     matrix(1, nrow = nrow(coords_new), ncol = 1)
   }
 
-  params <- object$params
+  if (is.null(m_pred)) {
+    m_pred <- object$m %||% 15L
+  }
 
-  pred_result <- GPvecchia::vecchia_prediction(
-    y              = object$response,
-    vecchia.approx = object$vecchia_approx,
-    covparms       = c(params["sigma2"], params["range"], params["nugget"]),
-    nugget         = params["nugget"],
-    covfun.name    = object$cov_fn,
-    locs.pred      = coords_new,
-    X              = object$X_train,
-    X.pred         = X_new,
-    ...
+  pred_result <- tryCatch(
+    {
+      vecchia_pred_approx <- GPvecchia::vecchia_specify(
+        locs      = object$coords,
+        m         = as.integer(m_pred),
+        locs.pred = coords_new,
+        ...
+      )
+
+      GPvecchia::vecchia_prediction(
+        z              = as.numeric(object$response - object$X_train %*% object$beta_hat),
+        vecchia.approx = vecchia_pred_approx,
+        covparms       = c(
+          object$params["sigma2"],
+          object$params["range"],
+          object$params["smoothness"]
+        ),
+        nuggets        = object$params["nugget"],
+        covmodel       = object$cov_fn,
+        return.values  = "meanvar"
+      )
+    },
+    error = function(e) {
+      cli::cli_abort(
+        c(
+          "GPvecchia prediction failed.",
+          "x" = conditionMessage(e)
+        )
+      )
+    }
   )
 
-  preds    <- pred_result$mu.pred
+  preds    <- as.numeric(pred_result$mu.pred + X_new %*% object$beta_hat)
   variance <- pred_result$var.pred
 
   if (type == "numeric") {

@@ -44,6 +44,31 @@
 #' @return A list of class `"gopher_gstat_fit"` containing the fitted
 #'   variogram model, the original training data, and the formula.
 #'
+#' @examples
+#' if (requireNamespace("spacetime", quietly = TRUE)) {
+#'   data("air", package = "spacetime")
+#'
+#'   # `air` is provided as legacy ST components (matrix + SpatialPoints + Date).
+#'   # Convert one day to an `sf` object for spatial GP fitting.
+#'   day_id <- which.max(colSums(!is.na(air)))
+#'   air_day <- data.frame(
+#'     station = rownames(air),
+#'     pm10 = air[, day_id],
+#'     day = dates[day_id],
+#'     sp::coordinates(stations)
+#'   )
+#'   air_day <- air_day[stats::complete.cases(air_day$pm10), ]
+#'   air_sf <- sf::st_as_sf(
+#'     air_day,
+#'     coords = c("coords.x1", "coords.x2"),
+#'     crs = 4326,
+#'     remove = FALSE
+#'   )
+#'
+#'   fit <- gstat_gp_fit(pm10 ~ 1, data = air_sf)
+#'   fit
+#' }
+#'
 #' @export
 gstat_gp_fit <- function(
     formula,
@@ -187,6 +212,33 @@ gstat_gp_fit <- function(
 #' @param ... Forwarded to `gstat::krige()` / `gstat::krigeST()`.
 #'
 #' @return A [tibble::tibble()] with prediction columns.
+#' @examples
+#' if (requireNamespace("spacetime", quietly = TRUE)) {
+#'   data("air", package = "spacetime")
+#'
+#'   day_id <- which.max(colSums(!is.na(air)))
+#'   air_day <- data.frame(
+#'     station = rownames(air),
+#'     pm10 = air[, day_id],
+#'     day = dates[day_id],
+#'     sp::coordinates(stations)
+#'   )
+#'   air_day <- air_day[stats::complete.cases(air_day$pm10), ]
+#'   air_sf <- sf::st_as_sf(
+#'     air_day,
+#'     coords = c("coords.x1", "coords.x2"),
+#'     crs = 4326,
+#'     remove = FALSE
+#'   )
+#'
+#'   n_train <- floor(0.8 * nrow(air_sf))
+#'   train_sf <- air_sf[seq_len(n_train), ]
+#'   test_sf <- air_sf[seq.int(n_train + 1L, nrow(air_sf)), ]
+#'
+#'   fit <- gstat_gp_fit(pm10 ~ coords.x1 + coords.x2, data = train_sf)
+#'   gstat_gp_predict(fit, new_data = test_sf, type = "pred_int")
+#' }
+#'
 #' @export
 gstat_gp_predict <- function(
     object,

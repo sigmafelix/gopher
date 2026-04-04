@@ -1,9 +1,11 @@
 Package: gopher
 Title: tidymodels-Compatible Gaussian Process Model Zoo
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: c(
-    person("Felix", "Sigmar", role = c("aut", "cre"),
-           email = "felix.sigmar@example.com"))
+    person("Insang", "Song", role = c("aut", "cre"),
+           email = "geoissong@gmail.com"),
+    person("C", "Codex", role = c("aut"))
+    )
 Description: A gateway to various Gaussian Process (GP) packages available on
     CRAN, including gstat, fields, GPvecchia, and spNNGP. Provides a unified
     tidymodels-native interface through parsnip for model parameter adjustment
@@ -15,7 +17,7 @@ Description: A gateway to various Gaussian Process (GP) packages available on
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.1
+RoxygenNote: 7.3.3
 Depends:
     R (>= 4.1.0)
 Imports:
