@@ -37,6 +37,33 @@ test_that("extract_coords errors when coord_cols length != 2", {
   expect_error(gopher:::extract_coords(df, coord_cols = "x"), "length 2")
 })
 
+# ---- extract_st_coords ----------------------------------------------
+
+test_that("extract_st_coords appends numeric time from Date column", {
+  df <- make_spatial_df(8L)
+  df$day <- as.Date("2020-01-01") + seq_len(nrow(df))
+  coords <- gopher:::extract_st_coords(df, time_col = "day")
+  expect_true(is.matrix(coords))
+  expect_equal(ncol(coords), 3L)
+  expect_equal(colnames(coords), c("X", "Y", "T"))
+})
+
+test_that("extract_st_coords applies time scaling", {
+  df <- make_spatial_df(5L)
+  df$t <- as.numeric(seq_len(nrow(df)))
+  coords1 <- gopher:::extract_st_coords(df, time_col = "t", time_scale = 1)
+  coords2 <- gopher:::extract_st_coords(df, time_col = "t", time_scale = 2)
+  expect_equal(coords2[, "T"], coords1[, "T"] / 2)
+})
+
+test_that("extract_st_coords errors for missing time column", {
+  df <- make_spatial_df(4L)
+  expect_error(
+    gopher:::extract_st_coords(df, time_col = "not_a_col"),
+    "Time column"
+  )
+})
+
 # ---- translate_covariance -------------------------------------------
 
 test_that("translate_covariance maps canonical names to gstat names", {

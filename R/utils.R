@@ -63,6 +63,64 @@ extract_coords <- function(data, coord_cols = NULL) {
   )
 }
 
+#' Extract coordinate matrix for spatial or spatiotemporal models
+#'
+#' @param data An `sf` object or a `data.frame` with coordinate columns.
+#' @param coord_cols Character vector of length 2 giving spatial coordinate
+#'   column names for non-`sf` inputs.
+#' @param time_col Optional character scalar naming a time column to append
+#'   as a third coordinate dimension (`T`).
+#' @param time_scale Numeric scalar used to rescale the time coordinate.
+#'
+#' @return A numeric matrix with columns `X`, `Y`, and optionally `T`.
+#' @keywords internal
+extract_st_coords <- function(
+    data,
+    coord_cols = NULL,
+    time_col   = NULL,
+    time_scale = 1) {
+
+  coords <- extract_coords(data, coord_cols = coord_cols)
+  if (is.null(time_col)) {
+    return(coords)
+  }
+
+  plain_data <- drop_geometry(data)
+  if (!time_col %in% names(plain_data)) {
+    cli::cli_abort("Time column {.val {time_col}} was not found in {.arg data}.")
+  }
+
+  t_raw <- plain_data[[time_col]]
+  t_num <- if (inherits(t_raw, c("POSIXct", "POSIXt"))) {
+    as.numeric(t_raw)
+  } else if (inherits(t_raw, "Date")) {
+    as.numeric(t_raw)
+  } else if (is.numeric(t_raw)) {
+    as.numeric(t_raw)
+  } else {
+    t_parsed <- as.POSIXct(t_raw, tz = "UTC")
+    if (all(is.na(t_parsed))) {
+      cli::cli_abort(
+        "Time column {.val {time_col}} must be numeric, Date/POSIXt, or coercible to datetime."
+      )
+    }
+    as.numeric(t_parsed)
+  }
+
+  if (length(time_scale) != 1L || !is.numeric(time_scale) ||
+      is.na(time_scale) || time_scale == 0) {
+    cli::cli_abort("{.arg time_scale} must be a single non-zero numeric value.")
+  }
+
+  if (anyNA(t_num)) {
+    cli::cli_abort("Missing values detected in {.arg time_col}; remove or impute them first.")
+  }
+
+  st_coords <- cbind(coords, T = t_num / time_scale)
+  colnames(st_coords) <- c("X", "Y", "T")
+  st_coords
+}
+
 #' Drop geometry and return a plain data.frame
 #'
 #' @param data An `sf` object or `data.frame`.
@@ -106,6 +164,13 @@ drop_geometry <- function(data) {
     gaussian     = "gaussian",
     matern       = "matern",
     stein_matern = "matern"
+  ),
+  PrestoGP = c(
+    exponential  = "matern",
+    spherical    = "matern",
+    gaussian     = "matern",
+    matern       = "matern",
+    stein_matern = "matern"
   )
 )
 
@@ -113,7 +178,8 @@ drop_geometry <- function(data) {
 #'
 #' @param name A canonical gopher covariance name (e.g. `"exponential"`),
 #'   or `NULL` to return the engine default.
-#' @param engine One of `"gstat"`, `"fields"`, `"GPvecchia"`, `"spNNGP"`.
+#' @param engine One of `"gstat"`, `"fields"`, `"GPvecchia"`, `"spNNGP"`,
+#'   or `"PrestoGP"`.
 #' @param default The default value to return when `name` is `NULL`.
 #'
 #' @return A character string with the engine-specific covariance name.

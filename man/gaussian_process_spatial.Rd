@@ -50,7 +50,8 @@ A \code{gaussian_process_spatial} model specification of class
 \description{
 \code{gaussian_process_spatial()} defines a Gaussian Process model for spatial
 and spatiotemporal data. This model supports multiple backends ("engines"),
-including \strong{gstat}, \strong{fields}, \strong{GPvecchia}, and \strong{spNNGP}.
+including \strong{gstat}, \strong{fields}, \strong{GPvecchia}, \strong{spNNGP}, and
+\strong{PrestoGP}.
 }
 \details{
 \subsection{What does this model do?}{
@@ -72,21 +73,26 @@ kriging with a \code{time_col} engine argument.
 \item \code{"fields"} — Uses the \strong{fields} package (\code{Krig}/\code{mKrig}) for spatial
 kriging. Supports large datasets via \code{mKrig}.
 \item \code{"GPvecchia"} — Uses the \strong{GPvecchia} package for Vecchia-approximated
-GP inference, suitable for large spatial datasets.
+GP inference, suitable for large spatial and spatiotemporal datasets via
+\code{time_col}.
 \item \code{"spNNGP"} — Uses the \strong{spNNGP} package for Nearest Neighbor Gaussian
-Process models, also scalable for large datasets.
+Process models, also scalable for large spatial and spatiotemporal
+datasets via \code{time_col}.
+\item \code{"PrestoGP"} — Uses the \strong{PrestoGP} package for scalable penalized
+spatiotemporal Gaussian process models with built-in missing-value
+imputation and limit-of-detection handling.
 }
 }
 
 \subsection{Parameter Mapping}{
 
 Parameters are automatically mapped between the unified gopher interface
-and engine-specific argument names:\tabular{lllll}{
-   gopher \tab gstat (vgm) \tab fields (Krig) \tab GPvecchia \tab spNNGP \cr
-   \code{covariance_function} \tab \code{model} \tab \code{Covariance} \tab \code{covFun} \tab \code{cov.model} \cr
-   \code{range} \tab \code{range} \tab \code{aRange} \tab \code{range} \tab \code{phi} \cr
-   \code{nugget} \tab \code{nugget} \tab \code{sigma2} \tab \code{nugget} \tab \code{tau.sq} \cr
-   \code{sill} \tab \code{psill} \tab \code{sigma2} \tab \code{sigma2} \tab \code{sigma.sq} \cr
+and engine-specific argument names:\tabular{llllll}{
+   gopher \tab gstat (vgm) \tab fields (Krig) \tab GPvecchia \tab spNNGP \tab PrestoGP \cr
+   \code{covariance_function} \tab \code{model} \tab \code{Covariance} \tab \code{covFun} \tab \code{cov.model} \tab Matérn-only (mapped) \cr
+   \code{range} \tab \code{range} \tab \code{aRange} \tab \code{range} \tab \code{phi} \tab estimated internally \cr
+   \code{nugget} \tab \code{nugget} \tab \code{sigma2} \tab \code{nugget} \tab \code{tau.sq} \tab estimated internally \cr
+   \code{sill} \tab \code{psill} \tab \code{sigma2} \tab \code{sigma2} \tab \code{sigma.sq} \tab estimated internally \cr
 }
 
 }
@@ -110,9 +116,10 @@ spatial correlation of residuals. Use \code{y ~ 1} for \strong{Ordinary Kriging}
 
 \subsection{Spatiotemporal Kriging}{
 
-Spatiotemporal kriging is supported through the \code{"gstat"} engine by passing
-\code{time_col} as an engine argument via \code{set_engine()}. The column specified
-must contain date/time values.
+Spatiotemporal Gaussian process modelling is supported through the \code{"gstat"},
+\code{"GPvecchia"}, \code{"spNNGP"}, and \code{"PrestoGP"} engines by passing \code{time_col}
+as an engine argument via \code{set_engine()}. The column specified must contain
+date/time values (or numeric time indices).
 }
 }
 \examples{

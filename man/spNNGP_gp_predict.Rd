@@ -10,6 +10,8 @@ spNNGP_gp_predict(
   type = "numeric",
   level = 0.95,
   coord_cols = NULL,
+  time_col = NULL,
+  time_scale = 1,
   ...
 )
 }
@@ -23,6 +25,12 @@ spNNGP_gp_predict(
 \item{level}{Confidence level for prediction intervals (default \code{0.95}).}
 
 \item{coord_cols}{Character(2) coord column names (non-sf path).}
+
+\item{time_col}{Optional character scalar specifying a time column for
+spatiotemporal modelling.}
+
+\item{time_scale}{Numeric scalar used to rescale time when \code{time_col} is
+provided. Default \code{1}.}
 
 \item{...}{Forwarded to \code{predict.spNNGP()}.}
 }

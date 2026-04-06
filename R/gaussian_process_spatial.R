@@ -3,7 +3,8 @@
 #' @description
 #' `gaussian_process_spatial()` defines a Gaussian Process model for spatial
 #' and spatiotemporal data. This model supports multiple backends ("engines"),
-#' including **gstat**, **fields**, **GPvecchia**, and **spNNGP**.
+#' including **gstat**, **fields**, **GPvecchia**, **spNNGP**, and
+#' **PrestoGP**.
 #'
 #' @param mode A single character string for the prediction outcome mode.
 #'   The only possible value for this model is `"regression"`.
@@ -38,21 +39,26 @@
 #' * `"fields"` — Uses the **fields** package (`Krig`/`mKrig`) for spatial
 #'   kriging. Supports large datasets via `mKrig`.
 #' * `"GPvecchia"` — Uses the **GPvecchia** package for Vecchia-approximated
-#'   GP inference, suitable for large spatial datasets.
+#'   GP inference, suitable for large spatial and spatiotemporal datasets via
+#'   `time_col`.
 #' * `"spNNGP"` — Uses the **spNNGP** package for Nearest Neighbor Gaussian
-#'   Process models, also scalable for large datasets.
+#'   Process models, also scalable for large spatial and spatiotemporal
+#'   datasets via `time_col`.
+#' * `"PrestoGP"` — Uses the **PrestoGP** package for scalable penalized
+#'   spatiotemporal Gaussian process models with built-in missing-value
+#'   imputation and limit-of-detection handling.
 #'
 #' ## Parameter Mapping
 #'
 #' Parameters are automatically mapped between the unified gopher interface
 #' and engine-specific argument names:
 #'
-#' | gopher                | gstat (vgm)   | fields (Krig) | GPvecchia  | spNNGP    |
-#' |-----------------------|---------------|---------------|------------|-----------|
-#' | `covariance_function` | `model`       | `Covariance`  | `covFun`   | `cov.model` |
-#' | `range`               | `range`       | `aRange`      | `range`    | `phi`     |
-#' | `nugget`              | `nugget`      | `sigma2`      | `nugget`   | `tau.sq`  |
-#' | `sill`                | `psill`       | `sigma2`      | `sigma2`   | `sigma.sq` |
+#' | gopher                | gstat (vgm)   | fields (Krig) | GPvecchia  | spNNGP    | PrestoGP |
+#' |-----------------------|---------------|---------------|------------|-----------|----------|
+#' | `covariance_function` | `model`       | `Covariance`  | `covFun`   | `cov.model` | Matérn-only (mapped) |
+#' | `range`               | `range`       | `aRange`      | `range`    | `phi`     | estimated internally |
+#' | `nugget`              | `nugget`      | `sigma2`      | `nugget`   | `tau.sq`  | estimated internally |
+#' | `sill`                | `psill`       | `sigma2`      | `sigma2`   | `sigma.sq` | estimated internally |
 #'
 #' ## Spatial Inputs
 #'
@@ -69,9 +75,10 @@
 #'
 #' ## Spatiotemporal Kriging
 #'
-#' Spatiotemporal kriging is supported through the `"gstat"` engine by passing
-#' `time_col` as an engine argument via `set_engine()`. The column specified
-#' must contain date/time values.
+#' Spatiotemporal Gaussian process modelling is supported through the `"gstat"`,
+#' `"GPvecchia"`, `"spNNGP"`, and `"PrestoGP"` engines by passing `time_col`
+#' as an engine argument via `set_engine()`. The column specified must contain
+#' date/time values (or numeric time indices).
 #'
 #' @return A `gaussian_process_spatial` model specification of class
 #'   `c("gaussian_process_spatial", "model_spec")`.

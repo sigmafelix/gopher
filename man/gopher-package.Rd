@@ -6,7 +6,7 @@
 \alias{gopher-package}
 \title{gopher: tidymodels-Compatible Gaussian Process Model Zoo}
 \description{
-A gateway to various Gaussian Process (GP) packages available on CRAN, including gstat, fields, GPvecchia, and spNNGP. Provides a unified tidymodels-native interface through parsnip for model parameter adjustment and hyperparameter tuning. Supports spatial-only and spatiotemporal Kriging, sf inputs, prediction capabilities, and covariates for residual Gaussian Process (Universal Kriging) models. Parameters are automatically matched between the unified Kriging-centered argument names in gstat and the formulaic arguments used in other packages for the same construct.
+A gateway to various Gaussian Process (GP) packages available on CRAN, including gstat, fields, GPvecchia, spNNGP, and PrestoGP. Provides a unified tidymodels-native interface through parsnip for model parameter adjustment and hyperparameter tuning. Supports spatial-only and spatiotemporal Kriging, sf inputs, prediction capabilities, and covariates for residual Gaussian Process (Universal Kriging) models. Parameters are automatically matched between the unified Kriging-centered argument names in gstat and the formulaic arguments used in other packages for the same construct.
 }
 \seealso{
 Useful links:

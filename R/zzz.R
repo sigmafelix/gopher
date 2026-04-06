@@ -282,5 +282,54 @@ make_gaussian_process_spatial <- function() {
     )
   )
 
+  # PrestoGP
+  .register_engine("PrestoGP", "PrestoGP")
+
+  parsnip::set_fit(
+    model = "gaussian_process_spatial",
+    eng   = "PrestoGP",
+    mode  = "regression",
+    value = list(
+      interface = "formula",
+      protect   = c("formula", "data"),
+      func      = c(pkg = "gopher", fun = "PrestoGP_gp_fit"),
+      defaults  = list()
+    )
+  )
+
+  parsnip::set_pred(
+    model = "gaussian_process_spatial",
+    eng   = "PrestoGP",
+    mode  = "regression",
+    type  = "numeric",
+    value = list(
+      pre  = NULL,
+      post = NULL,
+      func = c(pkg = "gopher", fun = "PrestoGP_gp_predict"),
+      args = list(
+        object   = rlang::expr(object$fit),
+        new_data = rlang::expr(new_data)
+      )
+    )
+  )
+
+  parsnip::set_pred(
+    model = "gaussian_process_spatial",
+    eng   = "PrestoGP",
+    mode  = "regression",
+    type  = "pred_int",
+    value = list(
+      pre  = NULL,
+      post = NULL,
+      func = c(pkg = "gopher", fun = "PrestoGP_gp_predict"),
+      args = list(
+        object   = rlang::expr(object$fit),
+        new_data = rlang::expr(new_data),
+        type     = "pred_int",
+        level    = rlang::expr(level)
+      )
+    )
+  )
+
   invisible(NULL)
 }

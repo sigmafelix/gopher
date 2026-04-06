@@ -25,6 +25,10 @@
 #' @param m        Number of nearest neighbours for Vecchia approximation.
 #'   Default `15`.
 #' @param coord_cols Character(2) coordinate column names (non-sf path).
+#' @param time_col Optional character scalar specifying a time column for
+#'   spatiotemporal modelling.
+#' @param time_scale Numeric scalar used to rescale time when `time_col` is
+#'   provided. Default `1`.
 #' @param ... Additional arguments forwarded to
 #'   `GPvecchia::vecchia_specify()`.
 #'
@@ -63,11 +67,18 @@ GPvecchia_gp_fit <- function(
     sill                = NULL,
     m                   = 15L,
     coord_cols          = NULL,
+    time_col            = NULL,
+    time_scale          = 1,
     ...) {
 
   rlang::check_installed("GPvecchia", reason = "for the GPvecchia engine")
 
-  coords     <- extract_coords(data, coord_cols)
+  coords     <- extract_st_coords(
+    data,
+    coord_cols = coord_cols,
+    time_col   = time_col,
+    time_scale = time_scale
+  )
   plain_data <- drop_geometry(data)
   parsed     <- parse_formula(formula, plain_data)
 
@@ -193,6 +204,10 @@ GPvecchia_gp_fit <- function(
 #' @param m_pred   Number of nearest neighbours for prediction approximation.
 #'   Defaults to the training `m`.
 #' @param coord_cols Character(2) coord column names (non-sf path).
+#' @param time_col Optional character scalar specifying a time column for
+#'   spatiotemporal modelling.
+#' @param time_scale Numeric scalar used to rescale time when `time_col` is
+#'   provided. Default `1`.
 #' @param ... Additional arguments forwarded to
 #'   `GPvecchia::vecchia_specify()` for prediction graph construction.
 #'
@@ -233,12 +248,19 @@ GPvecchia_gp_predict <- function(
     level      = 0.95,
     m_pred     = NULL,
     coord_cols = NULL,
+    time_col   = NULL,
+    time_scale = 1,
     ...) {
 
   rlang::check_installed("GPvecchia", reason = "for the GPvecchia engine")
   type <- rlang::arg_match(type, c("numeric", "pred_int"))
 
-  coords_new <- extract_coords(new_data, coord_cols)
+  coords_new <- extract_st_coords(
+    new_data,
+    coord_cols = coord_cols,
+    time_col   = time_col,
+    time_scale = time_scale
+  )
 
   plain_new <- drop_geometry(new_data)
 

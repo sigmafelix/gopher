@@ -10,7 +10,8 @@ translate_covariance(name, engine, default = NULL)
 \item{name}{A canonical gopher covariance name (e.g. \code{"exponential"}),
 or \code{NULL} to return the engine default.}
 
-\item{engine}{One of \code{"gstat"}, \code{"fields"}, \code{"GPvecchia"}, \code{"spNNGP"}.}
+\item{engine}{One of \code{"gstat"}, \code{"fields"}, \code{"GPvecchia"}, \code{"spNNGP"},
+or \code{"PrestoGP"}.}
 
 \item{default}{The default value to return when \code{name} is \code{NULL}.}
 }

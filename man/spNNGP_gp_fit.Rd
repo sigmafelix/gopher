@@ -16,6 +16,8 @@ spNNGP_gp_fit(
   n_burnin = 500L,
   method = "response",
   coord_cols = NULL,
+  time_col = NULL,
+  time_scale = 1,
   ...
 )
 }
@@ -46,6 +48,12 @@ effects (Universal Kriging).}
 \item{method}{spNNGP method: \code{"response"} (default) or \code{"latent"}.}
 
 \item{coord_cols}{Character(2) coordinate column names (non-sf path).}
+
+\item{time_col}{Optional character scalar specifying a time column for
+spatiotemporal modelling.}
+
+\item{time_scale}{Numeric scalar used to rescale time when \code{time_col} is
+provided. Default \code{1}.}
 
 \item{...}{Additional arguments forwarded to \code{spNNGP::spNNGP()}.}
 }

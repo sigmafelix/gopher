@@ -13,6 +13,8 @@ GPvecchia_gp_fit(
   sill = NULL,
   m = 15L,
   coord_cols = NULL,
+  time_col = NULL,
+  time_scale = 1,
   ...
 )
 }
@@ -35,6 +37,12 @@ trend (Universal Kriging / residual GP).}
 Default \code{15}.}
 
 \item{coord_cols}{Character(2) coordinate column names (non-sf path).}
+
+\item{time_col}{Optional character scalar specifying a time column for
+spatiotemporal modelling.}
+
+\item{time_scale}{Numeric scalar used to rescale time when \code{time_col} is
+provided. Default \code{1}.}
 
 \item{...}{Additional arguments forwarded to
 \code{GPvecchia::vecchia_specify()}.}

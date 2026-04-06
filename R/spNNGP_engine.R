@@ -33,6 +33,10 @@
 #' @param n_burnin    MCMC burn-in. Default `500`.
 #' @param method    spNNGP method: `"response"` (default) or `"latent"`.
 #' @param coord_cols Character(2) coordinate column names (non-sf path).
+#' @param time_col Optional character scalar specifying a time column for
+#'   spatiotemporal modelling.
+#' @param time_scale Numeric scalar used to rescale time when `time_col` is
+#'   provided. Default `1`.
 #' @param ... Additional arguments forwarded to `spNNGP::spNNGP()`.
 #'
 #' @return A list of class `"gopher_spNNGP_fit"`.
@@ -79,11 +83,18 @@ spNNGP_gp_fit <- function(
     n_burnin            = 500L,
     method              = "response",
     coord_cols          = NULL,
+    time_col            = NULL,
+    time_scale          = 1,
     ...) {
 
   rlang::check_installed("spNNGP", reason = "for the spNNGP engine")
 
-  coords     <- extract_coords(data, coord_cols)
+  coords     <- extract_st_coords(
+    data,
+    coord_cols = coord_cols,
+    time_col   = time_col,
+    time_scale = time_scale
+  )
   plain_data <- drop_geometry(data)
   parsed     <- parse_formula(formula, plain_data)
 
@@ -163,6 +174,10 @@ spNNGP_gp_fit <- function(
 #' @param type     `"numeric"` (default) or `"pred_int"`.
 #' @param level    Confidence level for prediction intervals (default `0.95`).
 #' @param coord_cols Character(2) coord column names (non-sf path).
+#' @param time_col Optional character scalar specifying a time column for
+#'   spatiotemporal modelling.
+#' @param time_scale Numeric scalar used to rescale time when `time_col` is
+#'   provided. Default `1`.
 #' @param ... Forwarded to `predict.spNNGP()`.
 #'
 #' @return A [tibble::tibble()] with prediction columns.
@@ -207,12 +222,19 @@ spNNGP_gp_predict <- function(
     type       = "numeric",
     level      = 0.95,
     coord_cols = NULL,
+    time_col   = NULL,
+    time_scale = 1,
     ...) {
 
   rlang::check_installed("spNNGP", reason = "for the spNNGP engine")
   type <- rlang::arg_match(type, c("numeric", "pred_int"))
 
-  coords_new <- extract_coords(new_data, coord_cols)
+  coords_new <- extract_st_coords(
+    new_data,
+    coord_cols = coord_cols,
+    time_col   = time_col,
+    time_scale = time_scale
+  )
   plain_new  <- drop_geometry(new_data)
 
   # Design matrix for new locations

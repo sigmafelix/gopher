@@ -11,6 +11,8 @@ GPvecchia_gp_predict(
   level = 0.95,
   m_pred = NULL,
   coord_cols = NULL,
+  time_col = NULL,
+  time_scale = 1,
   ...
 )
 }
@@ -27,6 +29,12 @@ GPvecchia_gp_predict(
 Defaults to the training \code{m}.}
 
 \item{coord_cols}{Character(2) coord column names (non-sf path).}
+
+\item{time_col}{Optional character scalar specifying a time column for
+spatiotemporal modelling.}
+
+\item{time_scale}{Numeric scalar used to rescale time when \code{time_col} is
+provided. Default \code{1}.}
 
 \item{...}{Additional arguments forwarded to
 \code{GPvecchia::vecchia_specify()} for prediction graph construction.}
