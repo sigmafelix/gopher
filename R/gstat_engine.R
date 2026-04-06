@@ -88,6 +88,11 @@ gstat_gp_fit <- function(
 
   is_spatiotemporal <- !is.null(time_col)
 
+  # Save original data before sf conversion so the spatiotemporal path can
+  # build STIDF with all original columns (including any coord-named columns
+  # that double as formula covariates, e.g. `pm10 ~ x + y`).
+  orig_data <- data
+
   # ---- Convert data to sf if not already --------------------------------
   if (!inherits(data, "sf")) {
     coord_matrix <- extract_coords(data, coord_cols)
@@ -140,22 +145,87 @@ gstat_gp_fit <- function(
   # ---- Empirical variogram and fitting ----------------------------------
   if (is_spatiotemporal) {
     # Spatiotemporal path (gstat::krigeST)
+    rlang::check_installed(
+      c("spacetime", "sp"),
+      reason = "for spatiotemporal kriging with gstat"
+    )
     if (!time_col %in% names(sf::st_drop_geometry(data))) {
       cli::cli_abort(
         "Time column {.val {time_col}} not found in training data."
       )
     }
-    fitted_vgm  <- NULL   # deferred: ST variogram fitting is complex
-    st_data     <- .make_stfdf(data, time_col, formula)
+
+    st_data <- .make_stidf(orig_data, time_col)
+
+    # ---- Compute temporal lag structure from data -----------------------
+    plain_train <- drop_geometry(orig_data)
+    t_raw_train <- plain_train[[time_col]]
+    t_posix_all <- if (inherits(t_raw_train, "POSIXct")) {
+      t_raw_train
+    } else if (inherits(t_raw_train, c("Date", "POSIXt"))) {
+      as.POSIXct(as.character(t_raw_train), tz = "UTC")
+    } else if (is.numeric(t_raw_train)) {
+      as.POSIXct(as.Date(t_raw_train, origin = "1970-01-01"), tz = "UTC")
+    } else {
+      suppressWarnings(as.POSIXct(t_raw_train, tz = "UTC"))
+    }
+    t_uniq  <- sort(unique(t_posix_all))
+    t_diffs <- as.numeric(diff(t_uniq), units = "secs")
+    t_lag   <- if (length(t_diffs) > 0L) min(t_diffs[t_diffs > 0]) else 86400
+    n_t_lags <- min(max(length(t_uniq) - 1L, 1L), 5L)
+    tlags    <- seq(0, by = t_lag, length.out = n_t_lags + 1L)
+
+    # ---- Spatiotemporal empirical variogram ----------------------------
+    # variogramST.STIDF is broken when multiple stations share a time point;
+    # try to use STFDF (requires a regular grid) for the variogram step.
+    vgm_data <- .try_make_stfdf(orig_data, time_col) %||% st_data
+    emp_vgm_st <- tryCatch(
+      gstat::variogramST(formula, data = vgm_data, tlags = tlags,
+                         cutoff = initial_range),
+      error = function(e) {
+        cli::cli_warn(
+          c(
+            "ST empirical variogram failed: {conditionMessage(e)}",
+            "i" = "Falling back to initial ST variogram parameters."
+          )
+        )
+        NULL
+      }
+    )
+
+    # ---- Build and fit a separable ST variogram model ------------------
+    vgm_sp   <- gstat::vgm(initial_psill * 0.9, vgm_model, initial_range,
+                            nugget = initial_nugget)
+    vgm_t    <- gstat::vgm(1, "Exp", t_lag * 2)
+    vgmst_init <- gstat::vgmST("separable", space = vgm_sp, time = vgm_t,
+                                sill = initial_psill)
+
+    fitted_vgm_st <- if (!is.null(emp_vgm_st)) {
+      tryCatch(
+        gstat::fit.StVariogram(emp_vgm_st, vgmst_init),
+        error = function(e) {
+          cli::cli_warn(
+            c(
+              "ST variogram fitting failed: {conditionMessage(e)}",
+              "i" = "Using initial ST variogram parameters."
+            )
+          )
+          vgmst_init
+        }
+      )
+    } else {
+      vgmst_init
+    }
+
     fit_obj <- structure(
       list(
-        variogram_fit   = vgm_initial,
-        training_data   = data,
-        st_data         = st_data,
-        formula         = formula,
-        vgm_model       = vgm_model,
+        variogram_fit     = fitted_vgm_st,
+        training_data     = data,
+        st_data           = st_data,
+        formula           = formula,
+        vgm_model         = vgm_model,
         is_spatiotemporal = TRUE,
-        time_col        = time_col
+        time_col          = time_col
       ),
       class = "gopher_gstat_fit"
     )
@@ -255,6 +325,11 @@ gstat_gp_predict <- function(
   formula    <- object$formula
   vgm_fit    <- object$variogram_fit
 
+  # Save original new_data before sf conversion: the spatiotemporal path
+  # builds STIDF from the original (so formula covariates named after
+  # coordinate columns, e.g. `pm10 ~ x + y`, remain in the data slot).
+  orig_new_data <- new_data
+
   # ---- Convert new_data to sf -------------------------------------------
   if (!inherits(new_data, "sf")) {
     coords       <- extract_coords(new_data, coord_cols)
@@ -277,14 +352,16 @@ gstat_gp_predict <- function(
 
   # ---- Kriging ----------------------------------------------------------
   if (object$is_spatiotemporal) {
-    # Spatiotemporal prediction via krigeST
+    # Spatiotemporal prediction via krigeST.
+    # computeVar = TRUE is needed to obtain prediction variances for pred_int.
     time_col <- object$time_col
-    st_new   <- .make_stfdf(new_data, time_col, formula)
+    st_new   <- .make_stidf(orig_new_data, time_col)
     krige_result <- gstat::krigeST(
       formula,
-      data    = object$st_data,
-      newdata = st_new,
-      modelList = vgm_fit,
+      data        = object$st_data,
+      newdata     = st_new,
+      modelList   = vgm_fit,
+      computeVar  = (type == "pred_int"),
       ...
     )
     preds    <- krige_result@data$var1.pred
@@ -318,18 +395,104 @@ gstat_gp_predict <- function(
   )
 }
 
-# ---- Internal helper: build STFDF for spacetime-based gstat kriging ---
+# ---- Internal helper: build STIDF for spacetime-based gstat kriging ---
 
+#' Build a spacetime::STIDF from a data frame or sf object
+#'
+#' Creates an irregular space-time data frame (STIDF) suitable for
+#' `gstat::krigeST()`. One row per observation; no full regular grid required.
+#' The time column is coerced to POSIXct if it is a Date or numeric value.
+#'
+#' @param data An `sf` object or plain `data.frame`. Coordinate columns are
+#'   taken from the `sf` geometry or detected via [extract_coords()].
+#' @param time_col Character scalar naming the time column in `data`.
+#'
+#' @return A `spacetime::STIDF` object.
 #' @keywords internal
-.make_stfdf <- function(data, time_col, formula) {
+.make_stidf <- function(data, time_col) {
   rlang::check_installed(
     c("spacetime", "sp"),
     reason = "for spatiotemporal kriging with gstat"
   )
   coords  <- extract_coords(data)
   sp_obj  <- sp::SpatialPoints(coords)
-  times   <- sf::st_drop_geometry(data)[[time_col]]
-  df_data <- sf::st_drop_geometry(data)
+  plain   <- drop_geometry(data)
+
+  t_raw <- plain[[time_col]]
+  t_posix <- if (inherits(t_raw, "POSIXct")) {
+    t_raw
+  } else if (inherits(t_raw, c("Date", "POSIXt"))) {
+    as.POSIXct(as.character(t_raw), tz = "UTC")
+  } else if (is.numeric(t_raw)) {
+    as.POSIXct(as.Date(t_raw, origin = "1970-01-01"), tz = "UTC")
+  } else {
+    parsed <- suppressWarnings(as.POSIXct(t_raw, tz = "UTC"))
+    if (all(is.na(parsed))) {
+      cli::cli_abort(
+        "Cannot coerce time column {.val {time_col}} to POSIXct for STIDF construction."
+      )
+    }
+    parsed
+  }
+
+  df_data <- plain
   df_data[[time_col]] <- NULL
-  spacetime::STFDF(sp_obj, times, df_data)
+  spacetime::STIDF(sp_obj, t_posix, df_data)
+}
+
+# ---- Internal helper: build STFDF for variogramST -----------------------
+#
+# variogramST.STIDF has a subscript-out-of-bounds bug when multiple spatial
+# observations share the same time point (the common case: n_stations per
+# time step). variogramST works correctly on STFDF (full regular grid).
+#
+# This helper tries to reshape long-format data into STFDF.  It returns NULL
+# if the data is not a complete regular grid (so the caller can skip the
+# empirical variogram and fall back to the initial model).
+#
+#' @keywords internal
+.try_make_stfdf <- function(data, time_col) {
+  plain   <- drop_geometry(data)
+  coords  <- extract_coords(data)
+
+  t_raw <- plain[[time_col]]
+  t_posix <- if (inherits(t_raw, "POSIXct")) {
+    t_raw
+  } else if (inherits(t_raw, c("Date", "POSIXt"))) {
+    as.POSIXct(as.character(t_raw), tz = "UTC")
+  } else if (is.numeric(t_raw)) {
+    as.POSIXct(as.Date(t_raw, origin = "1970-01-01"), tz = "UTC")
+  } else {
+    suppressWarnings(as.POSIXct(t_raw, tz = "UTC"))
+  }
+
+  times_uniq <- sort(unique(t_posix))
+  n_t <- length(times_uniq)
+
+  # Round-trip coordinate matrix to a character key for deduplication
+  coord_key <- paste(round(coords[, 1], 10), round(coords[, 2], 10), sep = "_")
+  locs_uniq_key <- unique(coord_key)
+  n_s <- length(locs_uniq_key)
+
+  # Only proceed when the data is a complete regular (stations × times) grid
+  if (nrow(plain) != n_s * n_t) {
+    return(NULL)
+  }
+
+  # Determine time-index and space-index for each row
+  t_idx  <- match(t_posix,   times_uniq)
+  sp_idx <- match(coord_key, locs_uniq_key)
+
+  # Sort to time-major, space-inner order (STFDF layout)
+  ord  <- order(t_idx, sp_idx)
+  df_data <- plain[ord, ]
+  df_data[[time_col]] <- NULL
+
+  sp_uniq  <- sp::SpatialPoints(coords[match(locs_uniq_key, coord_key), ,
+                                       drop = FALSE])
+
+  tryCatch(
+    spacetime::STFDF(sp_uniq, times_uniq, df_data),
+    error = function(e) NULL
+  )
 }

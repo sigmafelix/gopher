@@ -29,7 +29,7 @@ multiple GP/Kriging backends available on CRAN.
 - **Covariates / Universal Kriging** — use a formula like `y ~ x1 + x2` to
   include fixed-effect trend terms (residual GP).
 - **Spatiotemporal Kriging / GP** — supported via `gstat`, `GPvecchia`,
-  `spNNGP`, and `PrestoGP` using a `time_col` engine argument.
+  and `PrestoGP` using a `time_col` engine argument.
 - **Prediction intervals** — use `predict(fit, type = "pred_int")`.
 - **Hyperparameter tuning** — `dials` parameter functions (`covariance_function()`,
   `gp_range()`, `gp_nugget()`, `gp_sill()`) integrate with `tune`.
@@ -67,9 +67,19 @@ air_sf <- st_as_sf(
   remove = FALSE
 )
 
-n_train <- floor(0.8 * nrow(air_sf))
-train_sf <- air_sf[seq_len(n_train), ]
-test_sf <- air_sf[seq.int(n_train + 1L, nrow(air_sf)), ]
+# Hold out both stations and timestamps for a genuine spatiotemporal test set
+stations_all <- sort(unique(air_sf$station))
+days_all <- sort(unique(air_sf$day))
+
+stations_test <- tail(stations_all, max(1, floor(length(stations_all) * 0.2)))
+days_test <- tail(days_all, max(1, floor(length(days_all) * 0.2)))
+
+train_sf <- air_sf[
+  !(air_sf$station %in% stations_test) & !(air_sf$day %in% days_test),
+]
+test_sf <- air_sf[
+  air_sf$station %in% stations_test & air_sf$day %in% days_test,
+]
 
 # Spatiotemporal model spec (gstat backend)
 gp_spec <- gaussian_process_spatial(covariance_function = "exponential") |>
@@ -90,10 +100,11 @@ pred_int <- predict(gp_fit, new_data = test_sf, type = "pred_int")
 `gopher` currently supports spatiotemporal prediction for:
 - `"gstat"`
 - `"GPvecchia"`
-- `"spNNGP"`
 - `"PrestoGP"`
 
-`"fields"` is currently spatial-only in `gopher`.
+`"fields"` and the current `spNNGP` adapter are spatial-only in `gopher`.
+The shared `train_df` / `test_df` split below is disjoint in both station and
+timestamp.
 
 ```r
 library(gopher)
@@ -104,7 +115,7 @@ library(spacetime)
 data("air", package = "spacetime")
 
 # Build station x day table, then convert to sf
-day_ids <- head(which(colSums(!is.na(air)) > 0), 100)
+day_ids <- head(which(colSums(!is.na(air)) > 0), 2000)
 air_st <- do.call(
   rbind,
   lapply(day_ids, function(i) {
@@ -124,9 +135,19 @@ air_sf <- st_as_sf(
   remove = FALSE
 )
 
-n_train <- floor(0.8 * nrow(air_sf))
-train_sf <- air_sf[seq_len(n_train), ]
-test_sf <- air_sf[seq.int(n_train + 1L, nrow(air_sf)), ]
+# Spatiotemporal split: training and prediction use different stations and days
+stations_all <- sort(unique(air_sf$station))
+days_all <- sort(unique(air_sf$day))
+
+stations_test <- tail(stations_all, max(2, floor(length(stations_all) * 0.2)))
+days_test <- tail(days_all, max(5, floor(length(days_all) * 0.2)))
+
+train_sf <- air_sf[
+  !(air_sf$station %in% stations_test) & !(air_sf$day %in% days_test),
+]
+test_sf <- air_sf[
+  air_sf$station %in% stations_test & air_sf$day %in% days_test,
+]
 
 train_df <- sf::st_drop_geometry(train_sf) |>
   dplyr::rename(x = coords.x1, y = coords.x2) |>
@@ -140,6 +161,21 @@ test_df <- sf::st_drop_geometry(test_sf) |>
 train_df <- train_df[stats::complete.cases(train_df[, c("pm10", "x", "y", "day")]), , drop = FALSE]
 test_df <- test_df[stats::complete.cases(test_df[, c("x", "y", "day")]), , drop = FALSE]
 
+# For the spatial-only spNNGP example, use one day with held-out stations.
+spatial_day <- min(days_all)
+spatial_sf <- air_sf[air_sf$day == spatial_day, ]
+spatial_train_sf <- spatial_sf[!(spatial_sf$station %in% stations_test), ]
+spatial_test_sf <- spatial_sf[spatial_sf$station %in% stations_test, ]
+
+spatial_train_df <- sf::st_drop_geometry(spatial_train_sf) |>
+  dplyr::rename(x = coords.x1, y = coords.x2) |>
+  dplyr::select(-station) |>
+  dplyr::mutate(day = as.integer(day))
+spatial_test_df <- sf::st_drop_geometry(spatial_test_sf) |>
+  dplyr::rename(x = coords.x1, y = coords.x2) |>
+  dplyr::select(-station) |>
+  dplyr::mutate(day = as.integer(day))
+
 ```
 
 ### 1) `gstat` spatiotemporal kriging
@@ -148,9 +184,9 @@ test_df <- test_df[stats::complete.cases(test_df[, c("x", "y", "day")]), , drop 
 spec_gstat <- gaussian_process_spatial(covariance_function = "exponential") |>
   set_engine("gstat", time_col = "day")
 
-fit_gstat <- fit(spec_gstat, pm10 ~ coords.x1 + coords.x2, data = train_sf)
-pred_gstat <- predict(fit_gstat, new_data = test_sf)
-pi_gstat <- predict(fit_gstat, new_data = test_sf, type = "pred_int")
+fit_gstat <- fit(spec_gstat, pm10 ~ x + y, data = train_df)
+pred_gstat <- predict(fit_gstat, new_data = test_df)
+pi_gstat <- predict(fit_gstat, new_data = test_df, type = "pred_int")
 ```
 
 ### 2) `GPvecchia` scalable spatiotemporal GP
@@ -161,30 +197,29 @@ spec_gpvecchia <- gaussian_process_spatial(covariance_function = "matern") |>
     "GPvecchia",
     time_col = "day",   # use time as 3rd coordinate dimension
     time_scale = 1, # seconds -> days scale
-    m = 15
+    m = 50
   )
 
 fit_gpvecchia <- fit(spec_gpvecchia, pm10 ~ x + y, data = train_df)
-pred_gpvecchia <- predict(fit_gpvecchia, new_data = as.data.frame(test_df[,-1]))
+
+pred_gpvecchia <- predict(fit_gpvecchia, new_data = test_df)
 pi_gpvecchia <- predict(fit_gpvecchia, new_data = test_df, type = "pred_int")
 ```
 
-### 3) `spNNGP` scalable spatiotemporal NNGP
+### 3) `spNNGP` spatial-only NNGP
 
 ```r
 spec_spnngp <- gaussian_process_spatial(covariance_function = "exponential") |>
   set_engine(
     "spNNGP",
-    time_col = "day",      # use time as 3rd coordinate dimension
-    time_scale = 86400,    # seconds -> days scale
     n_neighbors = 12,
     n_samples = 1000,
     n_burnin = 500
   )
 
-fit_spnngp <- fit(spec_spnngp, pm10 ~ coords.x1 + coords.x2, data = train_sf)
-pred_spnngp <- predict(fit_spnngp, new_data = test_sf)
-pi_spnngp <- predict(fit_spnngp, new_data = test_sf, type = "pred_int")
+fit_spnngp <- fit(spec_spnngp, pm10 ~ x + y, data = spatial_train_df)
+pred_spnngp <- predict(fit_spnngp, new_data = spatial_test_df)
+pi_spnngp <- predict(fit_spnngp, new_data = spatial_test_df, type = "pred_int")
 ```
 
 ### 4) `PrestoGP` scalable spatiotemporal GP with LOD-aware imputation

@@ -71,6 +71,25 @@ GPvecchia_gp_fit <- function(
     time_scale          = 1,
     ...) {
 
+  .eval_parsnip_arg <- function(x) {
+    if (rlang::is_quosure(x)) {
+      return(rlang::eval_tidy(x))
+    }
+    if (rlang::is_formula(x)) {
+      return(rlang::eval_tidy(rlang::f_rhs(x), env = rlang::f_env(x)))
+    }
+    x
+  }
+
+  covariance_function <- .eval_parsnip_arg(covariance_function)
+  range               <- .eval_parsnip_arg(range)
+  nugget              <- .eval_parsnip_arg(nugget)
+  sill                <- .eval_parsnip_arg(sill)
+  m                   <- .eval_parsnip_arg(m)
+  coord_cols          <- .eval_parsnip_arg(coord_cols)
+  time_col            <- .eval_parsnip_arg(time_col)
+  time_scale          <- .eval_parsnip_arg(time_scale)
+
   rlang::check_installed("GPvecchia", reason = "for the GPvecchia engine")
 
   coords     <- extract_st_coords(
@@ -189,6 +208,9 @@ GPvecchia_gp_fit <- function(
       training_data  = plain_data,
       formula        = formula,
       m              = as.integer(m),
+      coord_cols     = coord_cols,
+      time_col       = time_col,
+      time_scale     = time_scale,
       opt_result     = list(convergence = NA_integer_, par = log(theta_hat))
     ),
     class = "gopher_GPvecchia_fit"
@@ -252,14 +274,35 @@ GPvecchia_gp_predict <- function(
     time_scale = 1,
     ...) {
 
+  .eval_parsnip_arg <- function(x) {
+    if (rlang::is_quosure(x)) {
+      return(rlang::eval_tidy(x))
+    }
+    if (rlang::is_formula(x)) {
+      return(rlang::eval_tidy(rlang::f_rhs(x), env = rlang::f_env(x)))
+    }
+    x
+  }
+
+  type       <- .eval_parsnip_arg(type)
+  level      <- .eval_parsnip_arg(level)
+  m_pred     <- .eval_parsnip_arg(m_pred)
+  coord_cols <- .eval_parsnip_arg(coord_cols)
+  time_col   <- .eval_parsnip_arg(time_col)
+  time_scale <- .eval_parsnip_arg(time_scale)
+
   rlang::check_installed("GPvecchia", reason = "for the GPvecchia engine")
   type <- rlang::arg_match(type, c("numeric", "pred_int"))
 
+  use_coord_cols <- coord_cols %||% object$coord_cols
+  use_time_col   <- time_col   %||% object$time_col
+  use_time_scale <- time_scale %||% object$time_scale %||% 1
+
   coords_new <- extract_st_coords(
     new_data,
-    coord_cols = coord_cols,
-    time_col   = time_col,
-    time_scale = time_scale
+    coord_cols = use_coord_cols,
+    time_col   = use_time_col,
+    time_scale = use_time_scale
   )
 
   plain_new <- drop_geometry(new_data)
@@ -278,12 +321,19 @@ GPvecchia_gp_predict <- function(
          contain the required predictor columns."
       )
     }
-    stats::model.matrix(
-      stats::reformulate(preds),
-      data = plain_new
-    )
+    stats::model.matrix(stats::reformulate(preds), data = plain_new)
   } else {
     matrix(1, nrow = nrow(coords_new), ncol = 1)
+  }
+
+  if (!is.null(colnames(object$X_train))) {
+    missing_cols <- setdiff(colnames(object$X_train), colnames(X_new))
+    if (length(missing_cols) > 0L) {
+      cli::cli_abort(
+        "The model matrix in {.arg new_data} is missing required columns for GPvecchia prediction."
+      )
+    }
+    X_new <- X_new[, colnames(object$X_train), drop = FALSE]
   }
 
   if (is.null(m_pred)) {

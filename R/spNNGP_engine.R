@@ -87,7 +87,38 @@ spNNGP_gp_fit <- function(
     time_scale          = 1,
     ...) {
 
+  .eval_parsnip_arg <- function(x) {
+    if (rlang::is_quosure(x)) {
+      return(rlang::eval_tidy(x))
+    }
+    if (rlang::is_formula(x)) {
+      return(rlang::eval_tidy(rlang::f_rhs(x), env = rlang::f_env(x)))
+    }
+    x
+  }
+
+  covariance_function <- .eval_parsnip_arg(covariance_function)
+  range               <- .eval_parsnip_arg(range)
+  nugget              <- .eval_parsnip_arg(nugget)
+  sill                <- .eval_parsnip_arg(sill)
+  n_neighbors         <- .eval_parsnip_arg(n_neighbors)
+  n_samples           <- .eval_parsnip_arg(n_samples)
+  n_burnin            <- .eval_parsnip_arg(n_burnin)
+  method              <- .eval_parsnip_arg(method)
+  coord_cols          <- .eval_parsnip_arg(coord_cols)
+  time_col            <- .eval_parsnip_arg(time_col)
+  time_scale          <- .eval_parsnip_arg(time_scale)
+
   rlang::check_installed("spNNGP", reason = "for the spNNGP engine")
+
+  if (!is.null(time_col)) {
+    cli::cli_abort(
+      c(
+        "The installed {.pkg spNNGP} engine only supports 2D spatial coordinates in this adapter.",
+        "i" = "Remove {.arg time_col} for spatial-only modelling, or use {.val GPvecchia}, {.val gstat}, or {.val PrestoGP} for spatiotemporal examples."
+      )
+    )
+  }
 
   coords     <- extract_st_coords(
     data,
@@ -226,8 +257,30 @@ spNNGP_gp_predict <- function(
     time_scale = 1,
     ...) {
 
+  .eval_parsnip_arg <- function(x) {
+    if (rlang::is_quosure(x)) {
+      return(rlang::eval_tidy(x))
+    }
+    if (rlang::is_formula(x)) {
+      return(rlang::eval_tidy(rlang::f_rhs(x), env = rlang::f_env(x)))
+    }
+    x
+  }
+
+  type       <- .eval_parsnip_arg(type)
+  level      <- .eval_parsnip_arg(level)
+  coord_cols <- .eval_parsnip_arg(coord_cols)
+  time_col   <- .eval_parsnip_arg(time_col)
+  time_scale <- .eval_parsnip_arg(time_scale)
+
   rlang::check_installed("spNNGP", reason = "for the spNNGP engine")
   type <- rlang::arg_match(type, c("numeric", "pred_int"))
+
+  if (!is.null(time_col)) {
+    cli::cli_abort(
+      "The installed {.pkg spNNGP} engine does not support spatiotemporal prediction in this adapter."
+    )
+  }
 
   coords_new <- extract_st_coords(
     new_data,

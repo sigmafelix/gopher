@@ -1,6 +1,6 @@
 Package: gopher
 Title: tidymodels-Compatible Gaussian Process Model Zoo
-Version: 0.3.0
+Version: 0.4.0
 Authors@R: c(
     person("Insang", "Song", role = c("aut", "cre"),
            email = "geoissong@gmail.com"),

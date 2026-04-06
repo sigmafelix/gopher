@@ -76,8 +76,7 @@ kriging. Supports large datasets via \code{mKrig}.
 GP inference, suitable for large spatial and spatiotemporal datasets via
 \code{time_col}.
 \item \code{"spNNGP"} — Uses the \strong{spNNGP} package for Nearest Neighbor Gaussian
-Process models, also scalable for large spatial and spatiotemporal
-datasets via \code{time_col}.
+Process models, scalable for large spatial datasets.
 \item \code{"PrestoGP"} — Uses the \strong{PrestoGP} package for scalable penalized
 spatiotemporal Gaussian process models with built-in missing-value
 imputation and limit-of-detection handling.
@@ -117,9 +116,9 @@ spatial correlation of residuals. Use \code{y ~ 1} for \strong{Ordinary Kriging}
 \subsection{Spatiotemporal Kriging}{
 
 Spatiotemporal Gaussian process modelling is supported through the \code{"gstat"},
-\code{"GPvecchia"}, \code{"spNNGP"}, and \code{"PrestoGP"} engines by passing \code{time_col}
-as an engine argument via \code{set_engine()}. The column specified must contain
-date/time values (or numeric time indices).
+\code{"GPvecchia"}, and \code{"PrestoGP"} engines by passing \code{time_col} as an engine
+argument via \code{set_engine()}. The column specified must contain date/time
+values (or numeric time indices).
 }
 }
 \examples{

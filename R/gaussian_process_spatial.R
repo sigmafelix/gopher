@@ -42,8 +42,7 @@
 #'   GP inference, suitable for large spatial and spatiotemporal datasets via
 #'   `time_col`.
 #' * `"spNNGP"` — Uses the **spNNGP** package for Nearest Neighbor Gaussian
-#'   Process models, also scalable for large spatial and spatiotemporal
-#'   datasets via `time_col`.
+#'   Process models, scalable for large spatial datasets.
 #' * `"PrestoGP"` — Uses the **PrestoGP** package for scalable penalized
 #'   spatiotemporal Gaussian process models with built-in missing-value
 #'   imputation and limit-of-detection handling.
@@ -76,9 +75,9 @@
 #' ## Spatiotemporal Kriging
 #'
 #' Spatiotemporal Gaussian process modelling is supported through the `"gstat"`,
-#' `"GPvecchia"`, `"spNNGP"`, and `"PrestoGP"` engines by passing `time_col`
-#' as an engine argument via `set_engine()`. The column specified must contain
-#' date/time values (or numeric time indices).
+#' `"GPvecchia"`, and `"PrestoGP"` engines by passing `time_col` as an engine
+#' argument via `set_engine()`. The column specified must contain date/time
+#' values (or numeric time indices).
 #'
 #' @return A `gaussian_process_spatial` model specification of class
 #'   `c("gaussian_process_spatial", "model_spec")`.
