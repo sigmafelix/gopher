@@ -115,7 +115,7 @@ library(spacetime)
 data("air", package = "spacetime")
 
 # Build station x day table, then convert to sf
-day_ids <- head(which(colSums(!is.na(air)) > 0), 2000)
+day_ids <- head(which(colSums(!is.na(air)) > 0), 1000)
 air_st <- do.call(
   rbind,
   lapply(day_ids, function(i) {
@@ -188,6 +188,10 @@ fit_gstat <- fit(spec_gstat, pm10 ~ x + y, data = train_df)
 pred_gstat <- predict(fit_gstat, new_data = test_df)
 pi_gstat <- predict(fit_gstat, new_data = test_df, type = "pred_int")
 ```
+> [!CAUTION]
+> `gstat` version utilizes `STIDF` class objects to represent spatiotemporal data, which may consume long time to run.
+
+
 
 ### 2) `GPvecchia` scalable spatiotemporal GP
 
