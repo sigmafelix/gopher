@@ -331,5 +331,54 @@ make_gaussian_process_spatial <- function() {
     )
   )
 
+  # sdmTMB
+  .register_engine("sdmTMB", "sdmTMB")
+
+  parsnip::set_fit(
+    model = "gaussian_process_spatial",
+    eng   = "sdmTMB",
+    mode  = "regression",
+    value = list(
+      interface = "formula",
+      protect   = c("formula", "data"),
+      func      = c(pkg = "gopher", fun = "sdmTMB_gp_fit"),
+      defaults  = list()
+    )
+  )
+
+  parsnip::set_pred(
+    model = "gaussian_process_spatial",
+    eng   = "sdmTMB",
+    mode  = "regression",
+    type  = "numeric",
+    value = list(
+      pre  = NULL,
+      post = NULL,
+      func = c(pkg = "gopher", fun = "sdmTMB_gp_predict"),
+      args = list(
+        object   = rlang::expr(object$fit),
+        new_data = rlang::expr(new_data)
+      )
+    )
+  )
+
+  parsnip::set_pred(
+    model = "gaussian_process_spatial",
+    eng   = "sdmTMB",
+    mode  = "regression",
+    type  = "pred_int",
+    value = list(
+      pre  = NULL,
+      post = NULL,
+      func = c(pkg = "gopher", fun = "sdmTMB_gp_predict"),
+      args = list(
+        object   = rlang::expr(object$fit),
+        new_data = rlang::expr(new_data),
+        type     = "pred_int",
+        level    = rlang::expr(level)
+      )
+    )
+  )
+
   invisible(NULL)
 }

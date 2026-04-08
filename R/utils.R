@@ -171,6 +171,13 @@ drop_geometry <- function(data) {
     gaussian     = "matern",
     matern       = "matern",
     stein_matern = "matern"
+  ),
+  sdmTMB = c(
+    exponential  = "matern",
+    spherical    = "matern",
+    gaussian     = "matern",
+    matern       = "matern",
+    stein_matern = "matern"
   )
 )
 

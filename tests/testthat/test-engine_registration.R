@@ -1,6 +1,6 @@
 # Tests for engine registration -------------------------------------------
 
-test_that("all five engines are registered with parsnip", {
+test_that("all six engines are registered with parsnip", {
   engines <- parsnip::show_engines("gaussian_process_spatial")
   registered <- engines$engine
   expect_true("gstat"      %in% registered)
@@ -8,6 +8,7 @@ test_that("all five engines are registered with parsnip", {
   expect_true("GPvecchia"  %in% registered)
   expect_true("spNNGP"     %in% registered)
   expect_true("PrestoGP"   %in% registered)
+  expect_true("sdmTMB"     %in% registered)
 })
 
 test_that("model mode is regression for all engines", {
@@ -38,6 +39,11 @@ test_that("set_engine('spNNGP') works without error", {
 test_that("set_engine('PrestoGP') works without error", {
   spec <- gaussian_process_spatial() |> parsnip::set_engine("PrestoGP")
   expect_equal(spec$engine, "PrestoGP")
+})
+
+test_that("set_engine('sdmTMB') works without error", {
+  spec <- gaussian_process_spatial() |> parsnip::set_engine("sdmTMB")
+  expect_equal(spec$engine, "sdmTMB")
 })
 
 test_that("tunable parameters are recognised", {

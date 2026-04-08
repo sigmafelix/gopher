@@ -33,6 +33,7 @@ Suggests:
     fields,
     GPvecchia,
     gstat,
+    sdmTMB,
     sp,
     spacetime,
     spNNGP,
