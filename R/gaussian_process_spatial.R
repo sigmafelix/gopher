@@ -46,18 +46,22 @@
 #' * `"PrestoGP"` — Uses the **PrestoGP** package for scalable penalized
 #'   spatiotemporal Gaussian process models with built-in missing-value
 #'   imputation and limit-of-detection handling.
+#' * `"sdmTMB"` — Uses the **sdmTMB** package for spatial and spatiotemporal
+#'   models via Template Model Builder (TMB) with an INLA-style SPDE mesh.
+#'   Supports spatiotemporal modelling via `time_col` and `spatiotemporal`
+#'   engine arguments.
 #'
 #' ## Parameter Mapping
 #'
 #' Parameters are automatically mapped between the unified gopher interface
 #' and engine-specific argument names:
 #'
-#' | gopher                | gstat (vgm)   | fields (Krig) | GPvecchia  | spNNGP    | PrestoGP |
-#' |-----------------------|---------------|---------------|------------|-----------|----------|
-#' | `covariance_function` | `model`       | `Covariance`  | `covFun`   | `cov.model` | Matérn-only (mapped) |
-#' | `range`               | `range`       | `aRange`      | `range`    | `phi`     | estimated internally |
-#' | `nugget`              | `nugget`      | `sigma2`      | `nugget`   | `tau.sq`  | estimated internally |
-#' | `sill`                | `psill`       | `sigma2`      | `sigma2`   | `sigma.sq` | estimated internally |
+#' | gopher                | gstat (vgm)   | fields (Krig) | GPvecchia  | spNNGP    | PrestoGP | sdmTMB     |
+#' |-----------------------|---------------|---------------|------------|-----------|----------|------------|
+#' | `covariance_function` | `model`       | `Covariance`  | `covFun`   | `cov.model` | Matérn-only (mapped) | Matérn via SPDE mesh |
+#' | `range`               | `range`       | `aRange`      | `range`    | `phi`     | estimated internally | estimated internally |
+#' | `nugget`              | `nugget`      | `sigma2`      | `nugget`   | `tau.sq`  | estimated internally | estimated internally |
+#' | `sill`                | `psill`       | `sigma2`      | `sigma2`   | `sigma.sq` | estimated internally | estimated internally |
 #'
 #' ## Spatial Inputs
 #'
@@ -75,9 +79,11 @@
 #' ## Spatiotemporal Kriging
 #'
 #' Spatiotemporal Gaussian process modelling is supported through the `"gstat"`,
-#' `"GPvecchia"`, and `"PrestoGP"` engines by passing `time_col` as an engine
-#' argument via `set_engine()`. The column specified must contain date/time
-#' values (or numeric time indices).
+#' `"GPvecchia"`, `"PrestoGP"`, and `"sdmTMB"` engines by passing `time_col` as
+#' an engine argument via `set_engine()`. The column specified must contain
+#' date/time values (or numeric time indices). For `"sdmTMB"`, also pass
+#' `spatiotemporal` (one of `"iid"`, `"ar1"`, `"rw"`) to enable the
+#' spatiotemporal random field.
 #'
 #' @return A `gaussian_process_spatial` model specification of class
 #'   `c("gaussian_process_spatial", "model_spec")`.
