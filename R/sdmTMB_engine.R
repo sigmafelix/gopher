@@ -49,6 +49,11 @@
 #'   directly to `sdmTMB::sdmTMB()`.
 #' @param share_range Logical. Whether to share the spatial range between the
 #'   spatial and spatiotemporal random fields. Default `FALSE`.
+#' @param extra_time Integer or numeric vector of additional time values to
+#'   include in the model that are not present in `data`. Required when
+#'   prediction `newdata` contains time values unseen during training (e.g.
+#'   future time steps). Passed directly to `sdmTMB::sdmTMB()`. `NULL`
+#'   (default) = include only the time values present in `data`.
 #' @param silent Logical. Suppress model-fitting messages. Default `TRUE`.
 #' @param ... Additional arguments forwarded to `sdmTMB::sdmTMB()`.
 #'
@@ -59,6 +64,8 @@
 #'   * `xy_cols`    — internal coordinate column names used in the data.
 #'   * `coord_cols` — user-supplied `coord_cols` (may be `NULL`).
 #'   * `time_col`   — the time column name (may be `NULL`).
+#'   * `extra_time` — additional time values declared at fit time (may be
+#'     `NULL`).
 #'   * `family`     — the `family` object.
 #'
 #' @examples
@@ -90,6 +97,7 @@ sdmTMB_gp_fit <- function(
     n_knots             = NULL,
     family              = stats::gaussian(),
     share_range         = FALSE,
+    extra_time          = NULL,
     silent              = TRUE,
     ...) {
 
@@ -114,12 +122,15 @@ sdmTMB_gp_fit <- function(
   mesh_cutoff         <- .eval_parsnip_arg(mesh_cutoff)
   n_knots             <- .eval_parsnip_arg(n_knots)
   share_range         <- .eval_parsnip_arg(share_range)
+  extra_time          <- .eval_parsnip_arg(extra_time)
   silent              <- .eval_parsnip_arg(silent)
 
   rlang::check_installed("sdmTMB", reason = "for the sdmTMB engine")
 
   spatial        <- rlang::arg_match(spatial,        c("on", "off"))
-  spatiotemporal <- rlang::arg_match(spatiotemporal, c("off", "iid", "ar1", "rw"))
+  spatiotemporal <- rlang::arg_match(
+    spatiotemporal, c("off", "iid", "ar1", "rw")
+  )
 
   # Warn if a non-Matern covariance was requested
   cov_name <- covariance_function %||% "matern"
@@ -195,6 +206,10 @@ sdmTMB_gp_fit <- function(
     fit_args$time <- time_col
   }
 
+  if (!is.null(extra_time)) {
+    fit_args$extra_time <- extra_time
+  }
+
   extra <- list(...)
   fit_args <- c(fit_args, extra)
 
@@ -207,6 +222,23 @@ sdmTMB_gp_fit <- function(
     }
   )
 
+  # ---- Convergence check ------------------------------------------------
+  sanity_ok <- tryCatch({
+    sr <- sdmTMB::sanity(fit_obj, gradient_thresh = 0.001, print = FALSE)
+    isTRUE(sr$all_ok)
+  }, error = function(e) NA)
+
+  if (isFALSE(sanity_ok)) {
+    cli::cli_warn(
+      c(
+        "sdmTMB model may not have converged.",
+        "i" = paste0(
+          "Run {.code sdmTMB::sanity(fit$sdmtmb_fit)} for full diagnostics."
+        )
+      )
+    )
+  }
+
   structure(
     list(
       sdmtmb_fit     = fit_obj,
@@ -215,6 +247,7 @@ sdmTMB_gp_fit <- function(
       xy_cols        = xy_cols,
       coord_cols     = coord_cols,
       time_col       = time_col,
+      extra_time     = extra_time,
       family         = family,
       spatiotemporal = spatiotemporal
     ),
@@ -298,8 +331,22 @@ sdmTMB_gp_predict <- function(
       ...
     ),
     error = function(e) {
+      msg <- conditionMessage(e)
+      if (grepl("new time elements", msg, fixed = TRUE)) {
+        cli::cli_abort(
+          c(
+            "predict.sdmTMB() failed: new time values in {.arg new_data}",
+            "x" = msg,
+            "i" = paste0(
+              "Pass {.arg extra_time} to {.fn sdmTMB_gp_fit} (or ",
+              "{.code set_engine()}) containing all time values that ",
+              "will appear in prediction data."
+            )
+          )
+        )
+      }
       cli::cli_abort(
-        c("predict.sdmTMB() failed.", "x" = conditionMessage(e))
+        c("predict.sdmTMB() failed.", "x" = msg)
       )
     }
   )
@@ -314,7 +361,10 @@ sdmTMB_gp_predict <- function(
   se <- pred_result$est_se
   if (is.null(se) || anyNA(se)) {
     cli::cli_abort(
-      "sdmTMB did not return valid prediction standard errors for {.val type = 'pred_int'}."
+      paste0(
+        "sdmTMB did not return valid prediction standard errors ",
+        "for {.val type = 'pred_int'}."
+      )
     )
   }
 

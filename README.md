@@ -16,6 +16,7 @@ multiple GP/Kriging backends available on CRAN.
 | `"GPvecchia"` | [GPvecchia](https://cran.r-project.org/package=GPvecchia) | Vecchia-approximated GP (scalable) |
 | `"spNNGP"` | [spNNGP](https://cran.r-project.org/package=spNNGP) | Nearest-Neighbor GP (scalable, MCMC) |
 | `"PrestoGP"` | [PrestoGP](https://github.com/NIEHS/PrestoGP) | Scalable penalized spatiotemporal GP with LOD-aware missing-value imputation |
+| `"sdmTMB"` | [sdmTMB](https://cran.r-project.org/package=sdmTMB) | SPDE-based Matérn GP via TMB (spatial + spatiotemporal, IID / AR1 / RW fields) |
 
 ## Features
 
@@ -29,7 +30,7 @@ multiple GP/Kriging backends available on CRAN.
 - **Covariates / Universal Kriging** — use a formula like `y ~ x1 + x2` to
   include fixed-effect trend terms (residual GP).
 - **Spatiotemporal Kriging / GP** — supported via `gstat`, `GPvecchia`,
-  and `PrestoGP` using a `time_col` engine argument.
+  `PrestoGP`, and `sdmTMB` using a `time_col` engine argument.
 - **Prediction intervals** — use `predict(fit, type = "pred_int")`.
 - **Hyperparameter tuning** — `dials` parameter functions (`covariance_function()`,
   `gp_range()`, `gp_nugget()`, `gp_sill()`) integrate with `tune`.
@@ -101,6 +102,7 @@ pred_int <- predict(gp_fit, new_data = test_sf, type = "pred_int")
 - `"gstat"`
 - `"GPvecchia"`
 - `"PrestoGP"`
+- `"sdmTMB"` (via `spatiotemporal = "iid"` / `"ar1"` / `"rw"`)
 
 `"fields"` and the current `spNNGP` adapter are spatial-only in `gopher`.
 The shared `train_df` / `test_df` split below is disjoint in both station and
@@ -255,14 +257,78 @@ pred_prestogp <- predict(fit_prestogp, new_data = test_df)
 pi_prestogp <- predict(fit_prestogp, new_data = test_df, type = "pred_int")
 ```
 
+### 5) `sdmTMB` spatial-only SPDE-based GP
+
+```r
+spec_sdmtmb_spatial <- gaussian_process_spatial(covariance_function = "matern") |>
+  set_engine(
+    "sdmTMB",
+    spatial    = "on",
+    mesh_cutoff = 1   # minimum triangle edge length in coordinate units
+  )
+
+fit_sdmtmb_spatial <- fit(spec_sdmtmb_spatial, pm10 ~ x + y, data = spatial_train_df)
+pred_sdmtmb_spatial <- predict(fit_sdmtmb_spatial, new_data = spatial_test_df)
+pi_sdmtmb_spatial   <- predict(fit_sdmtmb_spatial, new_data = spatial_test_df, type = "pred_int")
+```
+
+### 6) `sdmTMB` spatiotemporal GP (AR1 temporal structure)
+
+```r
+# sdmTMB requires the time column to be an integer or factor
+# (train_df / test_df already have day as integer from the shared setup above)
+
+# extra_time: any time values in test data not present in training data must
+# be declared at fit time so sdmTMB can pre-allocate the AR1 latent field.
+extra_t <- setdiff(
+  as.integer(unique(test_df$day)),
+  as.integer(unique(train_df$day))
+)
+
+spec_sdmtmb_spt <- gaussian_process_spatial(covariance_function = "matern") |>
+  set_engine(
+    "sdmTMB",
+    time_col       = "day",
+    spatial        = "on",
+    spatiotemporal = "ar1",  # "iid", "ar1", or "rw"
+    mesh_cutoff    = 1,
+    share_range    = FALSE,
+    extra_time     = extra_t  # allow prediction at held-out time steps
+  )
+
+fit_sdmtmb_spt  <- fit(spec_sdmtmb_spt, pm10 ~ x + y, data = train_df)
+pred_sdmtmb_spt <- predict(fit_sdmtmb_spt, new_data = test_df)
+pi_sdmtmb_spt   <- predict(fit_sdmtmb_spt, new_data = test_df, type = "pred_int")
+```
+
+> [!NOTE]
+> sdmTMB estimates all covariance parameters (range, nugget, sill) via maximum likelihood
+> through TMB; `range`, `nugget`, and `sill` arguments in `gaussian_process_spatial()` are
+> accepted for interface consistency but are not passed to the engine.
+
 ## Parameter Mapping
 
-| gopher arg | gstat (vgm) | fields (Krig) | GPvecchia | spNNGP | PrestoGP |
-|---|---|---|---|---|---|
-| `covariance_function` | `model` | `cov.function` | `covfun.name` | `cov.model` | Matérn-only (mapped) |
-| `range` | `range` | `aRange` | `range` | `phi` | estimated internally |
-| `nugget` | `nugget` | `lambda × sigma2` | `nugget` | `tau.sq` | estimated internally |
-| `sill` | `psill` | `sigma2` | `sigma2` | `sigma.sq` | estimated internally |
+| gopher arg | gstat (vgm) | fields (Krig) | GPvecchia | spNNGP | PrestoGP | sdmTMB |
+|---|---|---|---|---|---|---|
+| `covariance_function` | `model` | `cov.function` | `covfun.name` | `cov.model` | Matérn-only (mapped) | Matérn-only via SPDE (mapped) |
+| `range` | `range` | `aRange` | `range` | `phi` | estimated internally | estimated internally (ML) |
+| `nugget` | `nugget` | `lambda × sigma2` | `nugget` | `tau.sq` | estimated internally | estimated internally (ML) |
+| `sill` | `psill` | `sigma2` | `sigma2` | `sigma.sq` | estimated internally | estimated internally (ML) |
+
+### sdmTMB-specific engine arguments
+
+| Argument | Type | Default | Description |
+|---|---|---|---|
+| `coord_cols` | `character(2)` | `NULL` (auto) | Coordinate column names for non-`sf` input |
+| `time_col` | `character` | `NULL` | Time column for spatiotemporal models |
+| `spatial` | `"on"` / `"off"` | `"on"` | Include a spatial random field |
+| `spatiotemporal` | `"off"` / `"iid"` / `"ar1"` / `"rw"` | `"off"` | Temporal structure of the spatiotemporal random field |
+| `mesh_cutoff` | `numeric` | auto (bbox diagonal / 10) | Minimum triangle edge length passed to `sdmTMB::make_mesh()` |
+| `n_knots` | `integer` | `NULL` | Number of k-means mesh knots (overrides `mesh_cutoff`) |
+| `family` | `family` object | `gaussian()` | Response distribution passed to `sdmTMB::sdmTMB()` |
+| `extra_time` | `integer` / `numeric` | `NULL` | Additional time values absent from training data that will appear in `newdata`; pre-allocates latent fields for those steps |
+| `share_range` | `logical` | `FALSE` | Share spatial range between spatial and spatiotemporal fields |
+| `silent` | `logical` | `TRUE` | Suppress fitting messages |
 
 ## Installation
 
@@ -274,4 +340,5 @@ remotes::install_github("sigmafelix/gopher")
 install.packages(c("gstat", "fields"))          # most common
 install.packages(c("GPvecchia", "spNNGP"))      # scalable engines
 remotes::install_github("NIEHS/PrestoGP")       # PrestoGP engine
+install.packages("sdmTMB")                      # sdmTMB engine (TMB/SPDE)
 ```

@@ -19,6 +19,7 @@ sdmTMB_gp_fit(
   n_knots = NULL,
   family = stats::gaussian(),
   share_range = FALSE,
+  extra_time = NULL,
   silent = TRUE,
   ...
 )
@@ -32,7 +33,7 @@ covariates (e.g. \code{y ~ x1 + x2}) for a model with a fixed-effects trend
 \item{data}{An \code{sf} object or a \code{data.frame} with coordinate columns.}
 
 \item{covariance_function}{Canonical covariance name (see
-\code{\link{gaussian_process_spatial}}). sdmTMB uses a Matérn covariance via the
+\code{\link[=gaussian_process_spatial]{gaussian_process_spatial()}}). sdmTMB uses a Matérn covariance via the
 SPDE mesh; any value is accepted but mapped to \code{"matern"}. A warning is
 issued for non-Matérn names.}
 
@@ -73,6 +74,12 @@ directly to \code{sdmTMB::sdmTMB()}.}
 \item{share_range}{Logical. Whether to share the spatial range between the
 spatial and spatiotemporal random fields. Default \code{FALSE}.}
 
+\item{extra_time}{Integer or numeric vector of additional time values to
+include in the model that are not present in \code{data}. Required when
+prediction \code{newdata} contains time values unseen during training (e.g.
+future time steps). Passed directly to \code{sdmTMB::sdmTMB()}. \code{NULL}
+(default) = include only the time values present in \code{data}.}
+
 \item{silent}{Logical. Suppress model-fitting messages. Default \code{TRUE}.}
 
 \item{...}{Additional arguments forwarded to \code{sdmTMB::sdmTMB()}.}
@@ -86,12 +93,14 @@ A list of class \code{"gopher_sdmTMB_fit"} containing:
 \item \code{xy_cols}    — internal coordinate column names used in the data.
 \item \code{coord_cols} — user-supplied \code{coord_cols} (may be \code{NULL}).
 \item \code{time_col}   — the time column name (may be \code{NULL}).
+\item \code{extra_time} — additional time values declared at fit time (may be
+\code{NULL}).
 \item \code{family}     — the \code{family} object.
 }
 }
 \description{
 This function is called internally by parsnip. End users should call
-\code{\link[parsnip:fit.model_spec]{parsnip::fit.model_spec()}} on a \code{gaussian_process_spatial} specification
+\code{\link[parsnip:fit]{parsnip::fit.model_spec()}} on a \code{gaussian_process_spatial} specification
 with \code{set_engine("sdmTMB")}.
 }
 \examples{
@@ -106,4 +115,5 @@ if (requireNamespace("sdmTMB", quietly = TRUE)) {
   fit <- sdmTMB_gp_fit(z ~ 1, data = train_sf)
   fit
 }
+
 }

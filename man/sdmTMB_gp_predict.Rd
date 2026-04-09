@@ -15,7 +15,7 @@ sdmTMB_gp_predict(
 }
 \arguments{
 \item{object}{A \code{"gopher_sdmTMB_fit"} object returned by
-\code{\link{sdmTMB_gp_fit}()}.}
+\code{\link[=sdmTMB_gp_fit]{sdmTMB_gp_fit()}}.}
 
 \item{new_data}{An \code{sf} object or \code{data.frame} with the same coordinate
 structure (and covariate columns, if any) as the training data.}
@@ -51,4 +51,5 @@ if (requireNamespace("sdmTMB", quietly = TRUE)) {
   fit   <- sdmTMB_gp_fit(z ~ 1, data = train_sf)
   sdmTMB_gp_predict(fit, new_data = newdat)
 }
+
 }

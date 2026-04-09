@@ -80,18 +80,22 @@ Process models, scalable for large spatial datasets.
 \item \code{"PrestoGP"} — Uses the \strong{PrestoGP} package for scalable penalized
 spatiotemporal Gaussian process models with built-in missing-value
 imputation and limit-of-detection handling.
+\item \code{"sdmTMB"} — Uses the \strong{sdmTMB} package for spatial and spatiotemporal
+models via Template Model Builder (TMB) with an INLA-style SPDE mesh.
+Supports spatiotemporal modelling via \code{time_col} and \code{spatiotemporal}
+engine arguments.
 }
 }
 
 \subsection{Parameter Mapping}{
 
 Parameters are automatically mapped between the unified gopher interface
-and engine-specific argument names:\tabular{llllll}{
-   gopher \tab gstat (vgm) \tab fields (Krig) \tab GPvecchia \tab spNNGP \tab PrestoGP \cr
-   \code{covariance_function} \tab \code{model} \tab \code{Covariance} \tab \code{covFun} \tab \code{cov.model} \tab Matérn-only (mapped) \cr
-   \code{range} \tab \code{range} \tab \code{aRange} \tab \code{range} \tab \code{phi} \tab estimated internally \cr
-   \code{nugget} \tab \code{nugget} \tab \code{sigma2} \tab \code{nugget} \tab \code{tau.sq} \tab estimated internally \cr
-   \code{sill} \tab \code{psill} \tab \code{sigma2} \tab \code{sigma2} \tab \code{sigma.sq} \tab estimated internally \cr
+and engine-specific argument names:\tabular{lllllll}{
+   gopher \tab gstat (vgm) \tab fields (Krig) \tab GPvecchia \tab spNNGP \tab PrestoGP \tab sdmTMB \cr
+   \code{covariance_function} \tab \code{model} \tab \code{Covariance} \tab \code{covFun} \tab \code{cov.model} \tab Matérn-only (mapped) \tab Matérn via SPDE mesh \cr
+   \code{range} \tab \code{range} \tab \code{aRange} \tab \code{range} \tab \code{phi} \tab estimated internally \tab estimated internally \cr
+   \code{nugget} \tab \code{nugget} \tab \code{sigma2} \tab \code{nugget} \tab \code{tau.sq} \tab estimated internally \tab estimated internally \cr
+   \code{sill} \tab \code{psill} \tab \code{sigma2} \tab \code{sigma2} \tab \code{sigma.sq} \tab estimated internally \tab estimated internally \cr
 }
 
 }
@@ -116,9 +120,11 @@ spatial correlation of residuals. Use \code{y ~ 1} for \strong{Ordinary Kriging}
 \subsection{Spatiotemporal Kriging}{
 
 Spatiotemporal Gaussian process modelling is supported through the \code{"gstat"},
-\code{"GPvecchia"}, and \code{"PrestoGP"} engines by passing \code{time_col} as an engine
-argument via \code{set_engine()}. The column specified must contain date/time
-values (or numeric time indices).
+\code{"GPvecchia"}, \code{"PrestoGP"}, and \code{"sdmTMB"} engines by passing \code{time_col} as
+an engine argument via \code{set_engine()}. The column specified must contain
+date/time values (or numeric time indices). For \code{"sdmTMB"}, also pass
+\code{spatiotemporal} (one of \code{"iid"}, \code{"ar1"}, \code{"rw"}) to enable the
+spatiotemporal random field.
 }
 }
 \examples{
