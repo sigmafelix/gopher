@@ -1,6 +1,6 @@
 Package: gopher
 Title: tidymodels-Compatible Gaussian Process Model Zoo
-Version: 0.5.0
+Version: 0.5.1
 Authors@R: c(
     person("Insang", "Song", role = c("aut", "cre"),
            email = "geoissong@gmail.com"),
@@ -33,6 +33,8 @@ Suggests:
     fields,
     GPvecchia,
     gstat,
+    knitr,
+    rmarkdown,
     sdmTMB,
     sp,
     spacetime,
@@ -41,6 +43,7 @@ Suggests:
     testthat (>= 3.0.0),
     workflows,
     withr
+VignetteBuilder: knitr
 Config/testthat/edition: 3
 URL: https://github.com/sigmafelix/gopher
 BugReports: https://github.com/sigmafelix/gopher/issues

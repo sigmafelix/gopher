@@ -34,10 +34,10 @@ effects (Universal Kriging).}
 \code{NULL} = uses a data-driven initial value.}
 
 \item{nugget}{Starting value for the nugget (\code{tau.sq}).
-\code{NULL} = 10 \\% of response variance.}
+\code{NULL} = 10 \% of response variance.}
 
 \item{sill}{Starting value for the partial sill (\code{sigma.sq}).
-\code{NULL} = 90 \\% of response variance.}
+\code{NULL} = 90 \% of response variance.}
 
 \item{n_neighbors}{Number of nearest neighbours. Default \code{15}.}
 

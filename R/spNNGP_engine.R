@@ -25,9 +25,9 @@
 #' @param range    Starting value for the range parameter (`phi`).
 #'   `NULL` = uses a data-driven initial value.
 #' @param nugget   Starting value for the nugget (`tau.sq`).
-#'   `NULL` = 10 \% of response variance.
+#'   `NULL` = 10 % of response variance.
 #' @param sill     Starting value for the partial sill (`sigma.sq`).
-#'   `NULL` = 90 \% of response variance.
+#'   `NULL` = 90 % of response variance.
 #' @param n_neighbors Number of nearest neighbours. Default `15`.
 #' @param n_samples   Number of MCMC samples. Default `1000`.
 #' @param n_burnin    MCMC burn-in. Default `500`.
@@ -157,9 +157,14 @@ spNNGP_gp_fit <- function(
   )
 
   priors <- list(
-    "phi.Unif"      = c(0.1, 10 * init_phi),
+    "phi.Unif"      = {
+      phi_lower <- max(init_phi / 100, sqrt(.Machine$double.eps))
+      phi_upper <- max(10 * init_phi, phi_lower * 1.01)
+      c(phi_lower, phi_upper)
+    },
     "sigma.sq.IG"   = c(2, init_sigma_sq),
-    "tau.sq.IG"     = c(2, init_tau_sq)
+    "tau.sq.IG"     = c(2, init_tau_sq),
+    "nu.unif" = if (cov_model == "matern") c(0.5, 2.5) else NULL
   )
 
   fit_obj <- tryCatch(

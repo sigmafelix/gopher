@@ -13,6 +13,26 @@
 extract_coords <- function(data, coord_cols = NULL) {
   if (inherits(data, "sf")) {
     coords <- sf::st_coordinates(data)
+
+    # Non-point geometries can expand to multiple coordinate rows per feature
+    # (e.g. POLYGON vertices), but downstream engines expect one location per
+    # observation. Use a representative point in those cases.
+    if (nrow(coords) != nrow(data)) {
+      cli::cli_inform(
+        c(
+          "Converting non-point {.pkg sf} geometries to representative points for coordinate extraction.",
+          "i" = "Using {.fn sf::st_point_on_surface} so each observation contributes exactly one location."
+        )
+      )
+      coords <- sf::st_coordinates(sf::st_point_on_surface(data))
+    }
+
+    if (nrow(coords) != nrow(data)) {
+      cli::cli_abort(
+        "Could not derive exactly one coordinate pair per observation from the {.pkg sf} geometry column."
+      )
+    }
+
     # st_coordinates may return X, Y, (Z), (L1, L2) — keep only X and Y
     return(coords[, c("X", "Y"), drop = FALSE])
   }
