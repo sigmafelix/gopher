@@ -24,6 +24,11 @@ The file contains polygon geometries, uses every `dens_*` column as a
 covariate, and fits separate models for the two air-pollution responses `NO`
 and `NO2`.
 
+Dataset is from:
+
+> Chambliss, S. et al. (2024). Local exposure misclassification in national models: relationships with urban infrastructure and demographics. _Journal of Exposure Science and Environmental Epidemiology_ 34, 761-769. https://doi.org/10.1038/s41370-023-00624-z
+
+
 For this dataset, the most reliable workflow is to convert each polygon to one
 representative point, project to UTM zone 10N, and work in kilometres. That
 avoids row-mismatch failures in point-based GP engines and keeps range-related
