@@ -249,7 +249,7 @@ translate_covariance <- function(name, engine, default = NULL) {
 #' @keywords internal
 parse_formula <- function(formula, data) {
   mf <- stats::model.frame(formula, data = data, na.action = stats::na.pass)
-  response      <- stats::model.response(mf)
+  response      <- unname(stats::model.response(mf))
   response_name <- as.character(formula[[2]])
   X             <- stats::model.matrix(formula, data = mf)
   # "has_covariates" means there is at least one predictor beyond the intercept

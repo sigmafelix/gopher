@@ -183,5 +183,17 @@ update.gaussian_process_spatial <- function(
     sill                = rlang::enquo(sill)
   )
 
-  parsnip::update_spec(object, parameters, args, fresh, ...)
+  update_args <- list(
+    object          = object,
+    parameters      = parameters,
+    args_enquo_list = args,
+    fresh           = fresh,
+    ...
+  )
+
+  if ("cls" %in% names(formals(parsnip::update_spec))) {
+    update_args$cls <- "gaussian_process_spatial"
+  }
+
+  do.call(parsnip::update_spec, update_args)
 }

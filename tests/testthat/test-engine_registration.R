@@ -56,7 +56,11 @@ test_that("tunable parameters are recognised", {
   ) |>
     parsnip::set_engine("gstat")
 
-  tun <- parsnip::tunable(spec)
+  tun <- if ("tunable" %in% getNamespaceExports("parsnip")) {
+    getExportedValue("parsnip", "tunable")(spec)
+  } else {
+    getFromNamespace("tunable.model_spec", "parsnip")(spec)
+  }
   expect_true("covariance_function" %in% tun$name)
   expect_true("range"               %in% tun$name)
   expect_true("nugget"              %in% tun$name)
