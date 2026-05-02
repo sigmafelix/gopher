@@ -7,11 +7,6 @@
 provides a unified [parsnip](https://parsnip.tidymodels.org/) interface to
 multiple spatial/spatiotemporal GP/Kriging backends available on CRAN or GitHub.
 
-> [!NOTE]
-> This project is largely based on "vibe coding," which means that no strong quality check was applied.
-> Major bugs are handled on case-by-case basis.
-
-
 ## Engines
 
 | Engine | Package | Description |
